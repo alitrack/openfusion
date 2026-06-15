@@ -4,6 +4,7 @@ package fusion
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lhy/openfusion/internal/api"
@@ -101,6 +102,11 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		}
 	}
 
+	// Step 1b: If judge=false, return panel responses directly
+	if req.Judge != nil && !*req.Judge {
+		return buildPanelOnlyResponse(presetName, panelResponses), nil
+	}
+
 	// Step 2: Judge synthesis
 	judgeCfg := p.Judge
 	result, err := e.judgeSynth.Synthesize(ctx, judgeCfg, prompt, panelResponses)
@@ -139,4 +145,59 @@ func extractLastUserMessage(messages []types.ChatMessage) string {
 		}
 	}
 	return ""
+}
+
+// buildPanelOnlyResponse constructs a response without judge synthesis.
+func buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) *types.ChatResponse {
+	var b strings.Builder
+	summaries := make([]types.PanelResponseSummary, 0, len(responses))
+	totalUsage := types.Usage{}
+
+	for _, pr := range responses {
+		summary := types.PanelResponseSummary{
+			Model:      pr.Member.Model,
+			DurationMs: pr.Duration.Milliseconds(),
+			CostUSD:    pr.Usage.CostUSD,
+			Error:      pr.Error,
+		}
+		if pr.TimedOut {
+			summary.Error = "timeout"
+		}
+		if pr.Error == "" && !pr.TimedOut {
+			summary.Content = pr.Content
+			summary.PromptTokens = pr.Usage.PromptTokens
+			summary.CompletionTokens = pr.Usage.CompletionTokens
+			summary.TotalTokens = pr.Usage.TotalTokens
+			totalUsage.PromptTokens += pr.Usage.PromptTokens
+			totalUsage.CompletionTokens += pr.Usage.CompletionTokens
+			totalUsage.TotalTokens += pr.Usage.TotalTokens
+			totalUsage.CostUSD += pr.Usage.CostUSD
+		}
+
+		// Build concatenated text
+		b.WriteString("=== ")
+		b.WriteString(pr.Member.Model)
+		b.WriteString(" ===\n")
+		if pr.Error != "" {
+			b.WriteString("[ERROR: ")
+			b.WriteString(pr.Error)
+			b.WriteString("]\n")
+		} else {
+			b.WriteString(pr.Content)
+		}
+		b.WriteString("\n\n")
+
+		summaries = append(summaries, summary)
+	}
+
+	return &types.ChatResponse{
+		ID:      fmt.Sprintf("ofusion_%d", time.Now().UnixNano()),
+		Object:  "chat.completion",
+		Model:   presetName,
+		Choices: []types.Choice{
+			{Index: 0, Message: types.ChatMessage{Role: "assistant", Content: strings.TrimSpace(b.String())}},
+		},
+		Usage:          totalUsage,
+		PanelResponses: summaries,
+	}
 }

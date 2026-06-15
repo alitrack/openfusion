@@ -20,6 +20,7 @@ type ChatRequest struct {
 	MaxTokens   int           `json:"max_tokens,omitempty"`
 	Temperature float64       `json:"temperature,omitempty"`
 	Stream      bool          `json:"stream,omitempty"`
+	Judge       *bool         `json:"judge,omitempty"`
 }
 
 // StreamChunk represents a single SSE data chunk in OpenAI format.
@@ -42,6 +43,18 @@ type StreamDelta struct {
 	Content string `json:"content,omitempty"`
 }
 
+// PanelResponseSummary is a public summary of one panel model's response.
+type PanelResponseSummary struct {
+	Model      string `json:"model"`
+	Content    string `json:"content"`
+	DurationMs int64  `json:"duration_ms"`
+	PromptTokens int  `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens int   `json:"total_tokens"`
+	CostUSD    float64 `json:"cost_usd"`
+	Error      string `json:"error,omitempty"`
+}
+
 // ChatResponse is the outgoing response following the OpenAI chat.completions format.
 type ChatResponse struct {
 	ID      string        `json:"id"`
@@ -50,6 +63,7 @@ type ChatResponse struct {
 	Choices []Choice      `json:"choices"`
 	Usage   Usage         `json:"usage,omitempty"`
 	Analysis *FusionAnalysis `json:"analysis,omitempty"`
+	PanelResponses []PanelResponseSummary `json:"panel_responses,omitempty"`
 }
 
 // Choice represents a single completion choice.

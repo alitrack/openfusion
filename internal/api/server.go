@@ -180,6 +180,23 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		req.ThinkBudget = 131072
 	}
 
+	// Validate panel override
+	if len(req.PanelOverride) > 0 {
+		for i, m := range req.PanelOverride {
+			if m.Provider == "" || m.Model == "" {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("panel[%d]: provider and model are required", i))
+				return
+			}
+		}
+	}
+	// Validate judge override
+	if req.JudgeOverride != nil {
+		if req.JudgeOverride.Provider == "" || req.JudgeOverride.Model == "" {
+			writeError(w, http.StatusBadRequest, "judge override: provider and model are required")
+			return
+		}
+	}
+
 	// Rate limit check (normalize model name to prevent case/whitespace bypass)
 	model := strings.ToLower(strings.TrimSpace(req.Model))
 	if s.rateLimiter != nil && s.rateLimiter.Enabled() {

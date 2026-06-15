@@ -51,12 +51,14 @@ func New(cfg Config) (*Cache, error) {
 	}, nil
 }
 
-// Key generates a cache key from preset name and messages.
-func Key(preset string, messages []types.ChatMessage) string {
-	data, _ := json.Marshal(struct {
-		Preset   string
-		Messages []types.ChatMessage
-	}{Preset: preset, Messages: messages})
+// Key generates a cache key from preset name, messages, and optional overrides.
+func Key(preset string, messages []types.ChatMessage, overrides ...interface{}) string {
+	v := struct {
+		Preset    string
+		Messages  []types.ChatMessage
+		Overrides []interface{}
+	}{Preset: preset, Messages: messages, Overrides: overrides}
+	data, _ := json.Marshal(v)
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%s:%x", preset, hash[:16])
 }

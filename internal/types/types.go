@@ -20,12 +20,16 @@ type ChatRequest struct {
 	MaxTokens      int               `json:"max_tokens,omitempty"`
 	Temperature    *float64          `json:"temperature,omitempty"`
 	Stream         bool              `json:"stream,omitempty"`
-	Judge          *bool             `json:"judge,omitempty"`
+	NoJudge        *bool             `json:"no_judge,omitempty"`
 	Tools          []interface{}     `json:"tools,omitempty"`
 	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
 	Think          *bool             `json:"think,omitempty"`
 	ThinkBudget    int               `json:"think_budget,omitempty"`
 	Codex          bool              `json:"codex,omitempty"`
+	// PanelOverride replaces the preset's panel entirely when non-nil.
+	PanelOverride []PanelMember `json:"panel,omitempty"`
+	// JudgeOverride replaces the preset's judge entirely when non-nil.
+	JudgeOverride *JudgeConfig `json:"judge,omitempty"`
 }
 
 // ResponseFormat controls structured output.

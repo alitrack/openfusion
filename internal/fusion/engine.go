@@ -182,6 +182,9 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		return nil, fmt.Errorf("unknown model: %s", presetName)
 	}
 
+	// Apply request-level overrides (panel/judge) before execution
+	p = applyPresetOverrides(p, req.PanelOverride, req.JudgeOverride)
+
 	ctx := context.Background()
 
 	// Start root tracing span
@@ -213,7 +216,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	}
 
 	// Step 0: Cache check before any API calls
-	cacheKey := cache.Key(presetName, req.Messages)
+	cacheKey := cache.Key(presetName, req.Messages, req.PanelOverride, req.JudgeOverride)
 	if e.cache != nil && e.cache.Enabled() {
 		if cached := e.cache.Get(cacheKey); cached != nil {
 			return cached, nil
@@ -242,7 +245,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	}
 
 	// Step 1a: If judge=false, return panel responses directly
-	if req.Judge != nil && !*req.Judge {
+	if req.NoJudge != nil && *req.NoJudge {
 		return buildPanelOnlyResponse(presetName, panelResponses), nil
 	}
 
@@ -361,4 +364,36 @@ func buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) 
 		Usage:          totalUsage,
 		PanelResponses: summaries,
 	}
+}
+
+// applyPresetOverrides applies request-level panel/judge overrides to a preset.
+// Returns a new copy when overrides are present; returns the original pointer
+// when both are nil (zero allocation for common case).
+func applyPresetOverrides(p *types.Preset, panelOverride []types.PanelMember, judgeOverride *types.JudgeConfig) *types.Preset {
+	if panelOverride == nil && judgeOverride == nil {
+		return p
+	}
+	cp := deepCopyPreset(p)
+	if panelOverride != nil {
+		cp.Panel = make([]types.PanelMember, len(panelOverride))
+		copy(cp.Panel, panelOverride)
+	}
+	if judgeOverride != nil {
+		cp.Judge = *judgeOverride
+	}
+	return cp
+}
+
+// deepCopyPreset creates an independent deep copy of a preset.
+func deepCopyPreset(p *types.Preset) *types.Preset {
+	cp := &types.Preset{
+		Name:        p.Name,
+		Description: p.Description,
+		Judge:       p.Judge,
+	}
+	if len(p.Panel) > 0 {
+		cp.Panel = make([]types.PanelMember, len(p.Panel))
+		copy(cp.Panel, p.Panel)
+	}
+	return cp
 }

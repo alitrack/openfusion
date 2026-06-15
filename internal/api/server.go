@@ -18,6 +18,8 @@ type FusionEngine interface {
 	Execute(presetName string, req *types.ChatRequest) (*types.ChatResponse, error)
 	// ListPresets returns all available preset summaries.
 	ListPresets() []PresetSummary
+	// Metrics returns the metrics collector for snapshot retrieval.
+	Metrics() interface{} // returns *metrics.Collector or nil
 }
 
 // PresetSummary is the public view of a preset.
@@ -59,6 +61,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /v1/models", s.handleListModels)
+	s.mux.HandleFunc("GET /v1/metrics", s.handleMetrics)
 	s.mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
 }
 
@@ -108,6 +111,20 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 		"object": "list",
 		"data":   items,
 	})
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	metricsObj := s.engine.Metrics()
+	if metricsObj == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"uptime_seconds":  0,
+			"total_requests":  0,
+			"total_cost_usd":  0,
+			"presets":         map[string]interface{}{},
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, metricsObj)
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {

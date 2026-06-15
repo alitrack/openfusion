@@ -8,6 +8,7 @@ import (
 
 	"github.com/lhy/openfusion/internal/api"
 	"github.com/lhy/openfusion/internal/judge"
+	"github.com/lhy/openfusion/internal/metrics"
 	"github.com/lhy/openfusion/internal/panel"
 	"github.com/lhy/openfusion/internal/preset"
 	"github.com/lhy/openfusion/internal/provider"
@@ -20,6 +21,7 @@ type Engine struct {
 	panelDispatch  *panel.Dispatcher
 	judgeSynth     *judge.Synthesizer
 	defaultTimeout time.Duration
+	metrics        *metrics.Collector
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -29,12 +31,14 @@ func NewEngine(
 	panelTimeout time.Duration,
 	judgeTimeout time.Duration,
 	defaultTimeout time.Duration,
+	mc *metrics.Collector,
 ) *Engine {
 	return &Engine{
 		presetRegistry: pr,
 		panelDispatch:  panel.NewDispatcher(pm, panelTimeout),
 		judgeSynth:     judge.NewSynthesizer(pm, judgeTimeout),
 		defaultTimeout: defaultTimeout,
+		metrics:        mc,
 	}
 }
 
@@ -54,6 +58,14 @@ func (e *Engine) ListPresets() []api.PresetSummary {
 	return summaries
 }
 
+// Metrics returns the metrics collector snapshot.
+func (e *Engine) Metrics() interface{} {
+	if e.metrics == nil {
+		return nil
+	}
+	return e.metrics.Snapshot()
+}
+
 // Execute runs the full fusion pipeline: panel → judge → response.
 func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.ChatResponse, error) {
 	p, ok := e.presetRegistry.Get(presetName)
@@ -61,23 +73,47 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		return nil, fmt.Errorf("unknown model: %s", presetName)
 	}
 
+	if e.metrics != nil {
+		e.metrics.RecordRequest(presetName)
+	}
+	start := time.Now()
+
 	ctx, cancel := context.WithTimeout(context.Background(), e.defaultTimeout)
 	defer cancel()
 
 	// Extract the user's primary prompt (last user message)
 	prompt := extractLastUserMessage(req.Messages)
 	if prompt == "" {
+		if e.metrics != nil {
+			e.metrics.RecordFusionComplete(presetName, time.Since(start), false)
+		}
 		return nil, fmt.Errorf("no user message found in request")
 	}
 
 	// Step 1: Dispatch panel in parallel
 	panelResponses := e.panelDispatch.Dispatch(ctx, p, req)
 
+	// Record panel metrics
+	if e.metrics != nil {
+		for _, pr := range panelResponses {
+			success := len(pr.Error) == 0 && !pr.TimedOut
+			e.metrics.RecordPanelCall(presetName, pr.Member.Model, pr.Duration, pr.Usage.TotalTokens, pr.Usage.CostUSD, success)
+		}
+	}
+
 	// Step 2: Judge synthesis
 	judgeCfg := p.Judge
 	result, err := e.judgeSynth.Synthesize(ctx, judgeCfg, prompt, panelResponses)
 	if err != nil {
+		if e.metrics != nil {
+			e.metrics.RecordFusionComplete(presetName, time.Since(start), false)
+		}
 		return nil, fmt.Errorf("judge synthesis: %w", err)
+	}
+
+	if e.metrics != nil {
+		e.metrics.RecordJudgeCall(presetName, time.Since(start), result.Usage.TotalTokens, result.Usage.CostUSD)
+		e.metrics.RecordFusionComplete(presetName, time.Since(start), true)
 	}
 
 	// Step 3: Format as OpenAI-compatible response

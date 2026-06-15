@@ -38,6 +38,10 @@ func (m *mockEngine) ListPresets() []PresetSummary {
 	return m.presets
 }
 
+func (m *mockEngine) Metrics() interface{} {
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

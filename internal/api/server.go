@@ -2,6 +2,7 @@
 package api
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +13,9 @@ import (
 	"github.com/lhy/openfusion/internal/ratelimit"
 	"github.com/lhy/openfusion/internal/types"
 )
+
+//go:embed dashboard.html
+var dashboardHTML string
 
 // FusionEngine is the interface the API layer needs from the fusion orchestrator.
 type FusionEngine interface {
@@ -69,6 +73,8 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /v1/models", s.handleListModels)
 	s.mux.HandleFunc("GET /v1/metrics", s.handleMetrics)
+	s.mux.HandleFunc("GET /v1/dashboard", s.handleDashboard)
+	s.mux.HandleFunc("GET /", s.handleDashboard)
 	s.mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
 }
 
@@ -132,6 +138,12 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, metricsObj)
+}
+
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(dashboardHTML))
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {

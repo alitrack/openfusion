@@ -34,3 +34,7 @@ Thumbs.db
 
 # Config local
 config.yml
+
+# Planning docs (openspec + PRD — not committed)
+openspec/
+docs/

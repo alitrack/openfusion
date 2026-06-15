@@ -72,7 +72,7 @@ var categoryPatterns = []struct {
 // thinkPatterns are keywords that suggest deep reasoning is needed.
 var thinkPatterns = []string{
 	"为什么", "how", "why", "explain", "分析", "推理", "reason",
-	"deep", "复杂", "复杂", "architecture", "design", "trade-off",
+	"deep", "复杂", "architecture", "design", "trade-off",
 	"比较", "compare", "evaluate", "review", "debug", "optimize",
 	"implement", "implement ", "function ", "class ", "algorithm",
 	"parallel", "concurrent", "thread", "async", "performance",
@@ -159,9 +159,7 @@ func hasImageContent(messages []types.ChatMessage) bool {
 	// Check for image_url in message content
 	for _, msg := range messages {
 		if strings.Contains(msg.Content, "image_url") ||
-			strings.Contains(msg.Content, "data:image/") ||
-			strings.Contains(msg.Content, ".jpg") ||
-			strings.Contains(msg.Content, ".png") {
+			strings.Contains(msg.Content, "data:image/") {
 			return true
 		}
 	}

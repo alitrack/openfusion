@@ -163,22 +163,39 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rate limit check
+	// Validate field ranges
+	if req.MaxTokens < 0 {
+		req.MaxTokens = 0
+	}
+	if req.Temperature != nil {
+		if *req.Temperature < 0 || *req.Temperature > 2 {
+			t := 1.0
+			req.Temperature = &t
+		}
+	}
+	if req.ThinkBudget < 0 {
+		req.ThinkBudget = 0
+	}
+	if req.ThinkBudget > 131072 {
+		req.ThinkBudget = 131072
+	}
+
+	// Rate limit check (normalize model name to prevent case/whitespace bypass)
+	model := strings.ToLower(strings.TrimSpace(req.Model))
 	if s.rateLimiter != nil && s.rateLimiter.Enabled() {
-		allowed, retryAfter := s.rateLimiter.Allow(req.Model)
+		allowed, retryAfter := s.rateLimiter.Allow(model)
 		if !allowed {
 			w.Header().Set("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
-			writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{
-				"error":              fmt.Sprintf("rate limit exceeded for preset '%s'", req.Model),
+			writeJSON(w, http.StatusTooManyRequests, map[string]any{
+				"error":              fmt.Sprintf("rate limit exceeded for preset '%s'", model),
 				"retry_after_seconds": retryAfter.Seconds(),
 			})
 			return
 		}
 	}
 
-	// Auto-route via skill matching when model is auto/empty
-	model := req.Model
-	if model == "" || model == "auto" || model == "openfusion/auto" {
+	// Auto-route via skill matching when model is auto
+	if model == "auto" || model == "openfusion/auto" {
 		resp, err := s.engine.ExecuteAuto(&req)
 		if err != nil {
 		s.log.Warn("auto-route failed", "error", err.Error())
@@ -226,6 +243,15 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Check for zero choices to avoid index panic
+	if len(resp.Choices) == 0 {
+		fmt.Fprintf(w, "data: {\"error\":\"empty response\"}\n\n")
+		flusher.Flush()
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+		return
+	}
+
 	answer := resp.Choices[0].Message.Content
 	if answer == "" {
 		fmt.Fprintf(w, "data: [DONE]\n\n")
@@ -235,7 +261,7 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 
 	// Send analysis metadata as first chunk (non-standard, useful for debugging)
 	if resp.Analysis != nil {
-		analysisJSON, _ := json.Marshal(map[string]interface{}{
+		analysisJSON, _ := json.Marshal(map[string]any{
 			"type":            "analysis",
 			"consensus_count":  len(resp.Analysis.Consensus),
 			"contradictions":   len(resp.Analysis.Contradictions),
@@ -276,7 +302,7 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Send usage as final metadata chunk
-	usageJSON, _ := json.Marshal(map[string]interface{}{
+	usageJSON, _ := json.Marshal(map[string]any{
 		"type":            "usage",
 		"prompt_tokens":   resp.Usage.PromptTokens,
 		"completion_tokens": resp.Usage.CompletionTokens,

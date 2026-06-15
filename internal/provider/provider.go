@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lhy/openfusion/internal/logger"
 	"github.com/lhy/openfusion/internal/plugin"
 	"github.com/lhy/openfusion/internal/types"
 )
@@ -104,7 +105,7 @@ func (a *OpenAIAdapter) Name() string { return a.name }
 
 // ChatCompletion sends a chat request to an OpenAI-compatible endpoint.
 func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
-	// Apply plugin TransformRequest
+	// Apply plugin TransformRequest — single RLock acquisition for both plugin checks
 	a.mu.RLock()
 	plug := a.plugin
 	a.mu.RUnlock()
@@ -143,7 +144,10 @@ func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, req *types.ChatReque
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("provider %q returned status %d: %s", a.name, resp.StatusCode, string(respBody))
+		// Log full body server-side, return generic error to avoid leaking account/endpoint info
+		logger.Warn("provider returned non-200",
+			"provider", a.name, "status", fmt.Sprintf("%d", resp.StatusCode), "body", string(respBody))
+		return nil, fmt.Errorf("provider %q returned status %d", a.name, resp.StatusCode)
 	}
 
 	var chatResp types.ChatResponse
@@ -152,12 +156,9 @@ func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, req *types.ChatReque
 	}
 	chatResp.Model = req.Model
 
-	// Apply plugin TransformResponse
-	a.mu.RLock()
-	plug2 := a.plugin
-	a.mu.RUnlock()
-	if plug2 != nil {
-		chatRespPtr, err := plug2.TransformResponse(ctx, &chatResp)
+	// Apply plugin TransformResponse — reuse plug from single RLock above
+	if plug != nil {
+		chatRespPtr, err := plug.TransformResponse(ctx, &chatResp)
 		if err != nil {
 			return nil, fmt.Errorf("plugin TransformResponse: %w", err)
 		}

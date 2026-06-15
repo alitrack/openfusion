@@ -23,15 +23,25 @@ type Dispatcher struct {
 	timeout            time.Duration
 	healthChecker      HealthChecker
 	concurrencyManager *concurrency.ProviderConcurrencyManager
+	dispatchPadding    time.Duration
 }
 
 // NewDispatcher creates a panel dispatcher.
-func NewDispatcher(pm *provider.Manager, timeout time.Duration, hc HealthChecker) *Dispatcher {
+// maxConcurrent is the default per-provider concurrency limit (0 = use 4).
+// dispatchPadding is extra time beyond per-model timeout for global dispatch (0 = 30s).
+func NewDispatcher(pm *provider.Manager, timeout time.Duration, hc HealthChecker, maxConcurrent int, dispatchPadding time.Duration) *Dispatcher {
+	if maxConcurrent < 1 {
+		maxConcurrent = 4
+	}
+	if dispatchPadding <= 0 {
+		dispatchPadding = 30 * time.Second
+	}
 	return &Dispatcher{
 		providerManager:    pm,
 		timeout:            timeout,
 		healthChecker:      hc,
-		concurrencyManager: concurrency.NewProviderConcurrencyManager(8),
+		concurrencyManager: concurrency.NewProviderConcurrencyManager(maxConcurrent),
+		dispatchPadding:    dispatchPadding,
 	}
 }
 
@@ -48,7 +58,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, preset *types.Preset, req *ty
 	}
 
 	// Global timeout for entire dispatch — prevents wg.Wait() blocking forever
-	dispatchTimeout := d.timeout + 30*time.Second
+	dispatchTimeout := d.timeout + d.dispatchPadding
 	ctx, cancel := context.WithTimeout(ctx, dispatchTimeout)
 	defer cancel()
 
@@ -58,6 +68,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, preset *types.Preset, req *ty
 	for i, member := range preset.Panel {
 		wg.Add(1)
 		go func(idx int, m types.PanelMember) {
+			defer func() {
+				if r := recover(); r != nil {
+					results[idx] = types.PanelResponse{
+						Member: m,
+						Error:  fmt.Sprintf("internal error: %v", r),
+					}
+				}
+			}()
 			defer wg.Done()
 			results[idx] = d.callMember(ctx, m, req)
 		}(i, member)
@@ -68,7 +86,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, preset *types.Preset, req *ty
 }
 
 // callMember sends the request to a single panel member with timeout tracking.
-func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, req *types.ChatRequest) types.PanelResponse {
+func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, req *types.ChatRequest) (pr types.PanelResponse) {
+	// Recover from panics in provider calls
+	defer func() {
+		if r := recover(); r != nil {
+			pr = types.PanelResponse{
+				Member: member,
+				Error:  fmt.Sprintf("provider panic: %v", r),
+			}
+		}
+	}()
+
 	start := time.Now()
 
 	// Adaptive concurrency: try to acquire a slot
@@ -105,20 +133,18 @@ func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, r
 		}
 	}
 
-	// Build the request for this panel member
+	// Build the request for this panel member — always copy messages to avoid shared slice across goroutines
+	msgs := make([]types.ChatMessage, len(req.Messages))
+	copy(msgs, req.Messages)
+	if member.System != "" {
+		sysMsg := types.ChatMessage{Role: "system", Content: member.System}
+		msgs = append([]types.ChatMessage{sysMsg}, msgs...)
+	}
 	panelReq := &types.ChatRequest{
 		Model:       member.Model,
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,
-	}
-
-	// Prepend system message if configured
-	if member.System != "" {
-		panelReq.Messages = append([]types.ChatMessage{
-			{Role: "system", Content: member.System},
-		}, req.Messages...)
-	} else {
-		panelReq.Messages = req.Messages
+		Messages:    msgs,
 	}
 
 	// Create per-member context with timeout

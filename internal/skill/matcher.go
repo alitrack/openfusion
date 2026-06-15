@@ -55,6 +55,7 @@ func (m *Matcher) DefaultRef() string {
 // ---------------------------------------------------------------------------
 
 // containsAny checks if the slice contains any of the given items.
+// Used by tests and potentially by production matching logic.
 func containsAny(slice []string, items []string) bool {
 	for _, s := range slice {
 		for _, item := range items {
@@ -65,4 +66,3 @@ func containsAny(slice []string, items []string) bool {
 	}
 	return false
 }
-

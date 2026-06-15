@@ -62,6 +62,11 @@ func (c *Checker) Start(ctx context.Context) {
 		}
 
 		go func(providerName string, providerCfg Config, status *ProviderStatus) {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Error("health check panelic", fmt.Errorf("%v", r), "provider", providerName)
+				}
+			}()
 			// Initial check
 			c.check(providerName, providerCfg, status)
 

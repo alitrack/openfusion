@@ -49,7 +49,7 @@ func NewEngine(
 ) *Engine {
 	return &Engine{
 		presetRegistry: pr,
-		panelDispatch:  panel.NewDispatcher(pm, panelTimeout, hc),
+		panelDispatch:  panel.NewDispatcher(pm, panelTimeout, hc, 0, 0),
 		judgeSynth:     judge.NewSynthesizer(pm, judgeTimeout),
 		defaultTimeout: defaultTimeout,
 		metrics:        mc,

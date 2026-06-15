@@ -127,7 +127,7 @@ func TestAnalyzeRequest_ImageCheck(t *testing.T) {
 		{"Describe this image", false},
 		{"What's in data:image/png;base64,abc...", true},
 		{"Check this image_url", true},
-		{"See attachment.jpg", true},
+		{"Check this file: data:image/png;base64,iVBOR...", true},
 		{"Plain text only", false},
 	}
 

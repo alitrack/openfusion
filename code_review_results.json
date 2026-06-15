@@ -1,0 +1,114 @@
+[
+  {
+    "severity": "HIGH",
+    "file": "internal/skill/executor.go",
+    "line": 184,
+    "title": "Temperature 0.0 silently overridden to 0.3",
+    "detail": "In buildPanelRequest, the second guard condition `*panelReq.Temperature == 0` treats 0.0 (a valid temperature meaning greedy/deterministic) as 'unset' and overrides it to 0.3. The logic is: if skill params set 0.0, it gets overridden; if the incoming request sets 0.0, it also gets overridden. Users cannot explicitly request temperature=0 through either path.",
+    "fix": "Change the condition from `*panelReq.Temperature == 0` to false, i.e. only override when nil. Remove the second if block entirely, or change it to only set 0.3 default when nil."
+  },
+  {
+    "severity": "HIGH",
+    "file": "internal/api/server.go",
+    "line": 181,
+    "title": "Dead code: req.Model == '' never true in auto-route check",
+    "detail": "At line 161-164, req.Model is validated to be non-empty with an early return. The condition `model == \"\"` at line 181 is therefore dead code and will never trigger. This means requests with an empty model field are rejected at line 162, preventing the auto-routing logic from handling them.",
+    "fix": "Remove the `model == \"\"` check at line 181, since it is unreachable. Or, move the auto-route logic before the Model validation to accept empty model as 'auto'."
+  },
+  {
+    "severity": "HIGH",
+    "file": "internal/api/server.go",
+    "line": 251,
+    "title": "Streaming char-by-char loop lacks post-loop disconnect check for usage chunk",
+    "detail": "The streaming loop at lines 251-276 checks r.Context().Done() in each iteration. However, after the loop finishes, lines 279-290 write a usage metadata chunk and [DONE] signal without any context cancellation check. If the client disconnects during the character stream, the code still serializes and writes the usage chunk to a closed connection, doing wasted work and potentially causing write errors.",
+    "fix": "Add a context cancellation check before the usage chunk write: `if r.Context().Err() != nil { return }` before line 279. Also add it before the analysis metadata chunk at line 238."
+  },
+  {
+    "severity": "HIGH",
+    "file": "internal/concurrency/concurrency.go",
+    "line": 161,
+    "title": "Adaptive limit adjustment is dead code — Adjust/AdjustAll never called in production",
+    "detail": "ProviderConcurrencyManager.AdjustAll() and AdaptiveLimiter.Adjust() are defined but never called from any production code path in the project. They are only invoked in unit tests (concurrency_test.go). This means the adaptive concurrency limiter always operates at its initial maximum capacity and never adjusts based on failure rates, making the entire adaptive feature non-functional.",
+    "fix": "Either wire AdjustAll() into a periodic background goroutine (e.g., in the Engine or via a ticker loop), or remove the adaptive logic and simplify to a fixed-capacity semaphore."
+  },
+  {
+    "severity": "MEDIUM",
+    "file": "internal/judge/judge.go",
+    "line": 178,
+    "title": "extractSection incorrectly strips numbered list prefixes for '1.'",
+    "detail": "When a line starts with '1.', the code does `trimmed[1:]` which strips only the '1' character, leaving '. Point text'. The period remains in the extracted item. For double-digit numbers like '12.', only '1' is stripped leaving '2. Point text'. For '2.' and higher, the '1.' check never matches anyway, so those items are completely skipped.",
+    "fix": "Use `strings.TrimPrefix(trimmed, \"1. \")` or a more robust approach like `strings.SplitN(trimmed, \". \", 2)[1]` to correctly handle the full prefix. Also handle other numbered prefixes beyond '1.'."
+  },
+  {
+    "severity": "MEDIUM",
+    "file": "internal/panel/panel.go",
+    "line": 121,
+    "title": "Shared slice reference between panelReq.Messages and req.Messages when no system prompt",
+    "detail": "When member.System is empty, `panelReq.Messages = req.Messages` assigns the same underlying slice header to both variables. Since panel dispatch runs in parallel goroutines, each member shares the same Messages slice. While the current code only reads from it (no mutation), this is fragile: any future modification to panelReq.Messages would race with concurrent goroutines and corrupt the original request data.",
+    "fix": "Always make a copy: `panelReq.Messages = append([]types.ChatMessage{}, req.Messages...)` even when there's no system prompt. This ensures each goroutine has its own isolated message slice."
+  },
+  {
+    "severity": "MEDIUM",
+    "file": "internal/skill/executor.go",
+    "line": 133,
+    "title": "Potential index-out-of-range panic in prompt fallback for empty messages",
+    "detail": "In executeSelfEnsemble, if ExtractLastUserMessage returns empty string, the fallback accesses `req.Messages[len(req.Messages)-1]`. If req.Messages is empty (e.g., called from a code path without prior validation), this panics with index out of range. While the API server currently validates len(Messages)>0 before calling ExecuteAuto, other future callers may not.",
+    "fix": "Add a guard: `if len(req.Messages) == 0 { return nil, fmt.Errorf(\"no messages in request\") }` before the fallback. Alternatively, also check `len(req.Messages) > 0` before the fallback access."
+  },
+  {
+    "severity": "MEDIUM",
+    "file": "internal/fusion/engine.go",
+    "line": 143,
+    "title": "Root span uses timeout-dependent context; parent-child trace relationship may break",
+    "detail": "At line 145, the root span is created with `ctx` (which is `context.Background()`) and its End is deferred. At line 158, ctx is reassigned to a timeout context. Panel span (line 180) and judge span (line 207) are created with the timeout ctx. If the tracing implementation relies on context nesting for parent-child relationships, the root span created on the original ctx may not be recognized as the parent of spans created on the timeout-derived ctx.",
+    "fix": "Store the original context before the timeout wrap (e.g., `rootCtx := ctx`), and use `rootCtx` consistently for span lifecycle. Or maintain an explicit parent span reference rather than relying on context propagation."
+  },
+  {
+    "severity": "MEDIUM",
+    "file": "internal/skill/executor.go",
+    "line": 187,
+    "title": "Temperature zero-value override also applies to req.Temperature in buildPanelRequest",
+    "detail": "The logic chain: (1) panelReq.Temperature = s.Params.Temperature (could be nil). (2) If nil, copy from req.Temperature. (3) If STILL nil OR *panelReq.Temperature == 0, set to 0.3. If a user sends `\"temperature\": 0` in their API request, req.Temperature is &0.0. Step 2 copies it. Step 3 sees *panelReq.Temperature == 0 and overrides to 0.3. The user's explicit request for deterministic output is silently ignored. This is a separate manifestation of the same bug as the skill-params path.",
+    "fix": "Remove the `|| *panelReq.Temperature == 0` condition. Only override when temperature is nil. A nil temperature means unset; a zero temperature is an explicit user choice."
+  },
+  {
+    "severity": "LOW",
+    "file": "internal/skill/analyzer.go",
+    "line": 75,
+    "title": "Duplicate entry '复杂' in thinkPatterns list",
+    "detail": "The Chinese word '复杂' (complex) appears twice consecutively in the thinkPatterns slice. This wastes a pattern slot and has no functional benefit.",
+    "fix": "Remove the duplicate '复杂' entry."
+  },
+  {
+    "severity": "LOW",
+    "file": "internal/skill/analyzer.go",
+    "line": 163,
+    "title": "hasImageContent false positives for .jpg/.png in code or text content",
+    "detail": "The checks `strings.Contains(msg.Content, \".jpg\")` and `strings.Contains(msg.Content, \".png\")` trigger on any text mentioning these extensions, including code snippets, file paths, or natural language (e.g., 'convert image.jpg to .png'). This causes false HasImages=true for non-image requests.",
+    "fix": "Make the image detection more precise: check for the actual multimodal content parts structure (e.g., image_url blocks in the message) instead of simple substring matching on the text content."
+  },
+  {
+    "severity": "LOW",
+    "file": "internal/skill/executor.go",
+    "line": 101,
+    "title": "Unused variable 'start' in executeDirect",
+    "detail": "The variable `start` is assigned from `time.Now()` but only used via `_ = start // for future metrics`. This is dead code that adds noise.",
+    "fix": "Remove the `start` variable and the `_ = start` line since metrics recording is not yet implemented for direct mode."
+  },
+  {
+    "severity": "LOW",
+    "file": "internal/api/server.go",
+    "line": 300,
+    "title": "Ignored error from json.NewEncoder(w).Encode(v)",
+    "detail": "The writeJSON helper does not check the error returned by json.Encode. If encoding fails mid-write, the client receives a truncated or partial response with no indication of failure.",
+    "fix": "Log the error if json.Encode fails: `if err := json.NewEncoder(w).Encode(v); err != nil { s.log.Warn(\"writeJSON encode failed\", \"error\", err.Error()) }`. Note that the HTTP status code and Content-Type are already written before the encode call."
+  },
+  {
+    "severity": "LOW",
+    "file": "internal/api/server.go",
+    "line": 184,
+    "title": "Inconsistent indentation in error handler block",
+    "detail": "Lines 184-185 have an extra tab of indentation compared to the surrounding code. This is a formatting inconsistency that gofmt would fix, but it could also mask logic issues during code review.",
+    "fix": "Run `gofmt -w internal/api/server.go` to fix indentation."
+  }
+]

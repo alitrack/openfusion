@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/lhy/openfusion/internal/plugin"
 	"github.com/lhy/openfusion/internal/types"
 )
 
@@ -66,6 +67,7 @@ type OpenAIAdapter struct {
 	baseURL string
 	apiKey  string
 	client  *http.Client
+	plugin  plugin.ModelPlugin
 }
 
 // NewOpenAIAdapter creates an adapter for an OpenAI-compatible provider.
@@ -80,11 +82,30 @@ func NewOpenAIAdapter(name, baseURL, apiKey string) *OpenAIAdapter {
 	}
 }
 
+// SetPlugin attaches a model plugin to this adapter.
+func (a *OpenAIAdapter) SetPlugin(p plugin.ModelPlugin) {
+	a.plugin = p
+}
+
+// Plugin returns the attached plugin, or nil.
+func (a *OpenAIAdapter) Plugin() plugin.ModelPlugin {
+	return a.plugin
+}
+
 // Name returns the provider name.
 func (a *OpenAIAdapter) Name() string { return a.name }
 
 // ChatCompletion sends a chat request to an OpenAI-compatible endpoint.
 func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
+	// Apply plugin TransformRequest
+	if a.plugin != nil {
+		var err error
+		req, err = a.plugin.TransformRequest(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("plugin TransformRequest: %w", err)
+		}
+	}
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -119,7 +140,16 @@ func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, req *types.ChatReque
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-
 	chatResp.Model = req.Model
+
+	// Apply plugin TransformResponse
+	if a.plugin != nil {
+		chatRespPtr, err := a.plugin.TransformResponse(ctx, &chatResp)
+		if err != nil {
+			return nil, fmt.Errorf("plugin TransformResponse: %w", err)
+		}
+		return chatRespPtr, nil
+	}
+
 	return &chatResp, nil
 }

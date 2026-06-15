@@ -23,6 +23,8 @@ type ChatRequest struct {
 	Judge          *bool             `json:"judge,omitempty"`
 	Tools          []interface{}     `json:"tools,omitempty"`
 	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
+	Think          *bool             `json:"think,omitempty"`
+	ThinkBudget    int               `json:"think_budget,omitempty"`
 }
 
 // ResponseFormat controls structured output.

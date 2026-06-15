@@ -39,6 +39,7 @@ type ServerConfig struct {
 type ProviderDef struct {
 	BaseURL     string            `yaml:"base_url"`
 	APIKey      string            `yaml:"api_key"`
+	Plugin      string            `yaml:"plugin,omitempty"`
 	HealthCheck *HealthCheckDef   `yaml:"health_check,omitempty"`
 }
 

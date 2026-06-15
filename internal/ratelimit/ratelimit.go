@@ -69,17 +69,13 @@ func (l *Limiter) Allow(presetName string) (bool, time.Duration) {
 	if !ok {
 		// Unknown preset — create on the fly with default limits
 		l.mu.Lock()
-		// Double-check: another goroutine may have created it while we were unlocked
-		if lim, ok = l.limiters[presetName]; ok {
-			l.mu.Unlock()
-			goto check
+		lim, ok = l.limiters[presetName]
+		if !ok {
+			lim = rate.NewLimiter(rate.Limit(l.defaultC.Rate), l.defaultC.Burst)
+			l.limiters[presetName] = lim
 		}
-		lim = rate.NewLimiter(rate.Limit(l.defaultC.Rate), l.defaultC.Burst)
-		l.limiters[presetName] = lim
 		l.mu.Unlock()
 	}
-
-check:
 
 	// Reserve a token
 	r := lim.Reserve()

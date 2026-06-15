@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 
@@ -14,6 +15,7 @@ import (
 
 // Registry holds all available presets, indexed by name.
 type Registry struct {
+	mu      sync.RWMutex
 	presets map[string]*types.Preset
 }
 
@@ -26,6 +28,8 @@ func NewRegistry() *Registry {
 
 // Register adds a single preset to the registry.
 func (r *Registry) Register(p *types.Preset) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	name := normalizeName(p.Name)
 	if _, exists := r.presets[name]; exists {
 		return fmt.Errorf("duplicate preset: %s", name)
@@ -36,16 +40,20 @@ func (r *Registry) Register(p *types.Preset) error {
 
 // Get returns a preset by name.
 func (r *Registry) Get(name string) (*types.Preset, bool) {
+	r.mu.RLock()
 	p, ok := r.presets[normalizeName(name)]
+	r.mu.RUnlock()
 	return p, ok
 }
 
 // List returns all registered preset names with descriptions.
 func (r *Registry) List() []types.Preset {
+	r.mu.RLock()
 	result := make([]types.Preset, 0, len(r.presets))
 	for _, p := range r.presets {
 		result = append(result, *p)
 	}
+	r.mu.RUnlock()
 	return result
 }
 

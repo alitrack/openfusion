@@ -84,7 +84,7 @@ func AnalyzeRequest(req *types.ChatRequest) *RequestFeatures {
 	f := &RequestFeatures{}
 
 	// Extract last user message
-	lastMsg := extractLastUserMessage(req.Messages)
+	lastMsg := types.ExtractLastUserMessage(req.Messages)
 	f.UserMessage = lastMsg
 
 	// Token estimation
@@ -118,16 +118,6 @@ func AnalyzeRequest(req *types.ChatRequest) *RequestFeatures {
 // Analysis helpers
 // ---------------------------------------------------------------------------
 
-func extractLastUserMessage(messages []types.ChatMessage) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "user" {
-			return messages[i].Content
-		}
-	}
-	return ""
-}
-
-// estimateTokens does a rough token count (no tokenizer needed).
 func estimateTokens(messages []types.ChatMessage) int {
 	total := 0
 	for _, msg := range messages {

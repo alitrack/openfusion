@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/lhy/openfusion/internal/logger"
 	"github.com/lhy/openfusion/internal/types"
@@ -15,6 +16,7 @@ import (
 
 // Registry holds all skills and provides lookup by name and matching.
 type Registry struct {
+	mu       sync.RWMutex
 	skills   []*Skill
 	byName   map[string]*Skill
 	defaults []*Skill // skills auto-generated from presets
@@ -33,17 +35,22 @@ func (r *Registry) LoadDir(dir string) error {
 	if err != nil {
 		return fmt.Errorf("load skill dir: %w", err)
 	}
+	r.mu.Lock()
 	for _, s := range skills {
-		if err := r.Add(s); err != nil {
+		if err := r.addLocked(s); err != nil {
+			r.mu.Unlock()
 			return fmt.Errorf("add skill %s: %w", s.Name, err)
 		}
 		logger.Info("skill registered", "name", s.Name, "desc", s.Description, "mode", string(s.Mode), "priority", fmt.Sprintf("%d", s.Priority))
 	}
+	r.mu.Unlock()
 	return nil
 }
 
 // LoadPresets auto-generates skills from presets (backward compat).
 func (r *Registry) LoadPresets(presets []types.Preset) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for _, p := range presets {
 		fromPreset := FromPreset(&p)
 		if existing, ok := r.byName[fromPreset.Name]; ok {
@@ -61,8 +68,8 @@ func (r *Registry) LoadPresets(presets []types.Preset) {
 	r.skills = append(r.skills, r.defaults...)
 }
 
-// Add registers an explicit skill.
-func (r *Registry) Add(s *Skill) error {
+// addLocked adds a skill while holding r.mu.
+func (r *Registry) addLocked(s *Skill) error {
 	if _, exists := r.byName[s.Name]; exists {
 		return fmt.Errorf("duplicate skill: %s", s.Name)
 	}
@@ -71,20 +78,32 @@ func (r *Registry) Add(s *Skill) error {
 	return nil
 }
 
+// Add registers an explicit skill.
+func (r *Registry) Add(s *Skill) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.addLocked(s)
+}
+
 // Get returns a skill by name.
 func (r *Registry) Get(name string) (*Skill, bool) {
+	r.mu.RLock()
 	s, ok := r.byName[name]
+	r.mu.RUnlock()
 	return s, ok
 }
 
 // List returns all registered skills.
 func (r *Registry) List() []*Skill {
-	return r.skills
+	r.mu.RLock()
+	out := r.skills
+	r.mu.RUnlock()
+	return out
 }
 
 // Matcher creates a matcher from all registered skills.
 func (r *Registry) Matcher(defaultRef string) *Matcher {
-	return NewMatcher(r.skills, defaultRef)
+	return NewMatcher(r.List(), defaultRef)
 }
 
 // ---------------------------------------------------------------------------

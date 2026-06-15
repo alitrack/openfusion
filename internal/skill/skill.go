@@ -92,12 +92,16 @@ func matchTokenRange(expr string, val int) bool {
 	case strings.HasPrefix(expr, "<"):
 		// <300
 		n := 0
-		fmt.Sscanf(expr, "<%d", &n)
+		if _, err := fmt.Sscanf(expr, "<%d", &n); err != nil {
+			return false
+		}
 		return val < n
 	case strings.HasPrefix(expr, ">"):
 		// >1000
 		n := 0
-		fmt.Sscanf(expr, ">%d", &n)
+		if _, err := fmt.Sscanf(expr, ">%d", &n); err != nil {
+			return false
+		}
 		return val > n
 	case strings.Contains(expr, "-"):
 		// 500-2000, 500-, -1000
@@ -113,7 +117,9 @@ func matchTokenRange(expr string, val int) bool {
 	default:
 		// exact
 		n := 0
-		fmt.Sscanf(expr, "%d", &n)
+		if _, err := fmt.Sscanf(expr, "%d", &n); err != nil {
+			return false
+		}
 		return val == n
 	}
 }

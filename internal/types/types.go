@@ -35,10 +35,10 @@ type ResponseFormat struct {
 
 // StreamChunk represents a single SSE data chunk in OpenAI format.
 type StreamChunk struct {
-	ID      string       `json:"id"`
-	Object  string       `json:"object"`
-	Created int64        `json:"created"`
-	Model   string       `json:"model"`
+	ID      string         `json:"id"`
+	Object  string         `json:"object"`
+	Created int64          `json:"created"`
+	Model   string         `json:"model"`
 	Choices []StreamChoice `json:"choices"`
 }
 
@@ -185,4 +185,18 @@ type FusionResult struct {
 	Analysis *FusionAnalysis  `json:"analysis"`
 	Answer   string           `json:"answer"`
 	Usage    Usage            `json:"usage"`
+}
+
+// ---------------------------------------------------------------------------
+// Utility helpers
+// ---------------------------------------------------------------------------
+
+// ExtractLastUserMessage extracts the content of the last user message.
+func ExtractLastUserMessage(messages []ChatMessage) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			return messages[i].Content
+		}
+	}
+	return ""
 }

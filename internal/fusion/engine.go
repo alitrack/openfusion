@@ -159,7 +159,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	defer cancel()
 
 	// Extract the user's primary prompt (last user message)
-	prompt := extractLastUserMessage(req.Messages)
+	prompt := types.ExtractLastUserMessage(req.Messages)
 	if prompt == "" {
 		if e.metrics != nil {
 			e.metrics.RecordFusionComplete(presetName, time.Since(start), false)
@@ -261,16 +261,6 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	}
 
 	return resp, nil
-}
-
-// extractLastUserMessage gets the content of the last user message.
-func extractLastUserMessage(messages []types.ChatMessage) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "user" {
-			return messages[i].Content
-		}
-	}
-	return ""
 }
 
 // buildPanelOnlyResponse constructs a response without judge synthesis.

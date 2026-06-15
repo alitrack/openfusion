@@ -27,10 +27,9 @@ type Cache struct {
 
 // Config holds cache configuration.
 type Config struct {
-	Enabled  bool
-	MaxSize  int
-	TTL      time.Duration
-	Presets  map[string]time.Duration // per-preset TTL overrides
+	Enabled bool
+	MaxSize int
+	TTL     time.Duration
 }
 
 // New creates a new response cache.
@@ -82,15 +81,12 @@ func (c *Cache) Get(key string) *types.ChatResponse {
 }
 
 // Set stores a response in the cache.
-func (c *Cache) Set(key string, resp *types.ChatResponse, presetTTL ...time.Duration) {
+func (c *Cache) Set(key string, resp *types.ChatResponse) {
 	if !c.enabled {
 		return
 	}
 
 	ttl := c.ttl
-	if len(presetTTL) > 0 && presetTTL[0] > 0 {
-		ttl = presetTTL[0]
-	}
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
 	}

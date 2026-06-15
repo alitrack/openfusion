@@ -24,10 +24,9 @@ type Config struct {
 
 // CacheConfig holds response cache configuration.
 type CacheConfig struct {
-	Enabled  bool              `yaml:"enabled"`
-	MaxSize  int               `yaml:"max_size"`
-	TTL      string            `yaml:"ttl"` // e.g. "300s"
-	Presets  map[string]string `yaml:"presets,omitempty"` // per-preset TTL, e.g. "budget": "600s"
+	Enabled  bool   `yaml:"enabled"`
+	MaxSize  int    `yaml:"max_size"`
+	TTL      string `yaml:"ttl"` // e.g. "300s"
 }
 
 // ServerConfig holds HTTP server settings.
@@ -109,7 +108,6 @@ func DefaultConfig() *Config {
 			Enabled: false,
 			MaxSize: 1000,
 			TTL:     "300s",
-			Presets: make(map[string]string),
 		},
 	}
 }

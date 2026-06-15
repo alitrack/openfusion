@@ -53,9 +53,9 @@ func TestExtractLastUserMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractLastUserMessage(tt.messages)
+			got := types.ExtractLastUserMessage(tt.messages)
 			if got != tt.want {
-				t.Errorf("extractLastUserMessage() = %q, want %q", got, tt.want)
+				t.Errorf("ExtractLastUserMessage() = %q, want %q", got, tt.want)
 			}
 		})
 	}

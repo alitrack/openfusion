@@ -128,7 +128,7 @@ func (e *Executor) executeSelfEnsemble(ctx context.Context, s *Skill, req *types
 	}
 
 	// Extract user prompt
-	prompt := extractLastUserMessage(req.Messages)
+	prompt := types.ExtractLastUserMessage(req.Messages)
 	if prompt == "" {
 		prompt = req.Messages[len(req.Messages)-1].Content
 	}

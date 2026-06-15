@@ -67,8 +67,13 @@ func TestListModels(t *testing.T) {
 	}
 
 	var body map[string]interface{}
-	json.NewDecoder(rec.Body).Decode(&body)
-	data := body["data"].([]interface{})
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := body["data"].([]interface{})
+	if !ok {
+		t.Fatalf("body[\"data\"] is not an array")
+	}
 	if len(data) != 2 {
 		t.Fatalf("model count = %d, want 2", len(data))
 	}

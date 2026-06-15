@@ -18,22 +18,21 @@ import (
 type Collector struct {
 	startTime time.Time
 
-	mu        sync.RWMutex
-	presets   map[string]*presetMetrics
+	mu      sync.RWMutex
+	presets map[string]*presetMetrics
 }
 
 // presetMetrics holds counters for one fusion preset.
+// All access goes through Collector methods which hold Collector.mu.
 type presetMetrics struct {
-	mu sync.RWMutex
-
 	Requests       atomic.Int64
 	Success        atomic.Int64
 	Failed         atomic.Int64
-	TotalCostUSD   atomic.Value  // float64
-	TotalPanelCost atomic.Value  // float64
-	TotalJudgeCost atomic.Value  // float64
+	TotalCostUSD   atomic.Value // float64
+	TotalPanelCost atomic.Value // float64
+	TotalJudgeCost atomic.Value // float64
 	TotalTokens    atomic.Int64
-	TotalDuration  atomic.Int64  // ms
+	TotalDuration  atomic.Int64 // ms
 
 	// Per-model breakdown
 	models map[string]*modelMetrics
@@ -44,12 +43,12 @@ type presetMetrics struct {
 }
 
 type modelMetrics struct {
-	Calls          atomic.Int64
-	Success        atomic.Int64
-	Failed         atomic.Int64
-	TotalDuration  atomic.Int64 // ms
-	TotalTokens    atomic.Int64
-	TotalCostUSD   atomic.Value // float64
+	Calls         atomic.Int64
+	Success       atomic.Int64
+	Failed        atomic.Int64
+	TotalDuration atomic.Int64 // ms
+	TotalTokens   atomic.Int64
+	TotalCostUSD  atomic.Value // float64
 }
 
 // ---------------------------------------------------------------------------
@@ -109,12 +108,12 @@ func (c *Collector) RecordJudgeCall(preset string, duration time.Duration, token
 	addFloat(&pm.TotalJudgeCost, costUSD)
 	addFloat(&pm.TotalCostUSD, costUSD)
 
-	pm.mu.Lock()
+	c.mu.Lock()
 	pm.durations = append(pm.durations, float64(duration.Milliseconds()))
 	if len(pm.durations) > pm.durationsCap {
 		pm.durations = pm.durations[len(pm.durations)-pm.durationsCap:]
 	}
-	pm.mu.Unlock()
+	c.mu.Unlock()
 }
 
 // RecordFusionComplete records a completed fusion call (success or failure).
@@ -158,32 +157,30 @@ func (c *Collector) Snapshot() *Snapshot {
 		c.mu.RUnlock()
 
 		ps := PresetSnapshot{
-			Requests:     pm.Requests.Load(),
-			Success:      pm.Success.Load(),
-			Failed:       pm.Failed.Load(),
-			TotalTokens:  pm.TotalTokens.Load(),
+			Requests:      pm.Requests.Load(),
+			Success:       pm.Success.Load(),
+			Failed:        pm.Failed.Load(),
+			TotalTokens:   pm.TotalTokens.Load(),
 			AvgDurationMs: avgFromSum(pm.TotalDuration.Load(), pm.Requests.Load()),
-			PanelModels:  make(map[string]ModelSnapshot),
+			PanelModels:   make(map[string]ModelSnapshot),
 		}
 		ps.TotalCostUSD = loadFloat(&pm.TotalCostUSD)
 		ps.TotalPanelCost = loadFloat(&pm.TotalPanelCost)
 		ps.TotalJudgeCost = loadFloat(&pm.TotalJudgeCost)
-		ps.P50Ms, ps.P90Ms, ps.P99Ms = computeQuantiles(pm)
+		ps.P50Ms, ps.P90Ms, ps.P99Ms = c.computeQuantiles(pm)
 
 		// Iterate models
-		pm.mu.RLock()
+		c.mu.RLock()
 		modelNames := make([]string, 0, len(pm.models))
 		for mn := range pm.models {
 			modelNames = append(modelNames, mn)
 		}
-		pm.mu.RUnlock()
+		c.mu.RUnlock()
 
 		for _, mn := range modelNames {
-			mm := func() *modelMetrics {
-				pm.mu.RLock()
-				defer pm.mu.RUnlock()
-				return pm.models[mn]
-			}()
+			c.mu.RLock()
+			mm := pm.models[mn]
+			c.mu.RUnlock()
 
 			ms := ModelSnapshot{
 				Calls:         mm.Calls.Load(),
@@ -255,9 +252,9 @@ func (c *Collector) getOrCreatePreset(name string) *presetMetrics {
 		return pm
 	}
 	pm := &presetMetrics{
-		models:        make(map[string]*modelMetrics),
-		durations:     make([]float64, 0, 1000),
-		durationsCap:  1000,
+		models:       make(map[string]*modelMetrics),
+		durations:    make([]float64, 0, 1000),
+		durationsCap: 1000,
 	}
 	pm.TotalCostUSD.Store(float64(0))
 	pm.TotalPanelCost.Store(float64(0))
@@ -267,29 +264,22 @@ func (c *Collector) getOrCreatePreset(name string) *presetMetrics {
 }
 
 func (pm *presetMetrics) getOrCreateModel(name string) *modelMetrics {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
 	if mm, ok := pm.models[name]; ok {
 		return mm
 	}
+	// Lock-free: models is only modified under c.mu in getOrCreatePreset,
+	// and pm is always accessed through Collector methods holding c.mu.
 	mm := &modelMetrics{}
 	mm.TotalCostUSD.Store(float64(0))
 	pm.models[name] = mm
 	return mm
 }
 
-func avgFromSum(sum int64, count int64) float64 {
-	if count == 0 {
-		return 0
-	}
-	return float64(sum) / float64(count)
-}
-
-func computeQuantiles(pm *presetMetrics) (p50, p90, p99 float64) {
-	pm.mu.RLock()
+func (c *Collector) computeQuantiles(pm *presetMetrics) (p50, p90, p99 float64) {
+	c.mu.RLock()
 	durs := make([]float64, len(pm.durations))
 	copy(durs, pm.durations)
-	pm.mu.RUnlock()
+	c.mu.RUnlock()
 
 	if len(durs) == 0 {
 		return 0, 0, 0
@@ -300,6 +290,13 @@ func computeQuantiles(pm *presetMetrics) (p50, p90, p99 float64) {
 	p90 = percentile(durs, 90)
 	p99 = percentile(durs, 99)
 	return
+}
+
+func avgFromSum(sum int64, count int64) float64 {
+	if count == 0 {
+		return 0
+	}
+	return float64(sum) / float64(count)
 }
 
 func percentile(sorted []float64, p int) float64 {

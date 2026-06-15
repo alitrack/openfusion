@@ -19,6 +19,27 @@ type ChatRequest struct {
 	Messages    []ChatMessage `json:"messages"`
 	MaxTokens   int           `json:"max_tokens,omitempty"`
 	Temperature float64       `json:"temperature,omitempty"`
+	Stream      bool          `json:"stream,omitempty"`
+}
+
+// StreamChunk represents a single SSE data chunk in OpenAI format.
+type StreamChunk struct {
+	ID      string       `json:"id"`
+	Object  string       `json:"object"`
+	Created int64        `json:"created"`
+	Model   string       `json:"model"`
+	Choices []StreamChoice `json:"choices"`
+}
+
+// StreamChoice represents a single streaming choice.
+type StreamChoice struct {
+	Index int          `json:"index"`
+	Delta StreamDelta  `json:"delta"`
+}
+
+// StreamDelta represents the incremental content delta.
+type StreamDelta struct {
+	Content string `json:"content,omitempty"`
 }
 
 // ChatResponse is the outgoing response following the OpenAI chat.completions format.

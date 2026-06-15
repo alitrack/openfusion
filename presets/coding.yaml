@@ -1,0 +1,13 @@
+name: coding
+description: "代码开发 — DeepSeek V4 Pro + Qwen 3.5 122B → GLM 5.1 Judge"
+panel:
+  - provider: modelscope
+    model: deepseek-ai/DeepSeek-V4-Pro
+    system: "你是资深软件工程师，擅长编写生产级代码。注重代码质量、可维护性、错误处理、性能优化。给出完整可运行的代码示例。"
+  - provider: modelscope
+    model: Qwen/Qwen3.5-122B
+    system: "你是技术架构师，擅长设计模式和系统设计。注重代码的可扩展性、测试覆盖、文档质量。从架构视角分析问题。"
+judge:
+  provider: modelscope
+  model: ZhipuAI/GLM-5.1
+  system: "你是代码审查专家。阅读所有代码方案后：1) 指出各方案的优缺点和潜在 bug；2) 综合最佳方案；3) 给出完整的高质量代码实现。确保代码正确、完整、可直接运行。"

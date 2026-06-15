@@ -3,9 +3,11 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/lhy/openfusion/internal/types"
 )
@@ -125,6 +127,12 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle streaming
+	if req.Stream {
+		s.handleStreamingCompletion(w, r, &req)
+		return
+	}
+
 	resp, err := s.engine.Execute(req.Model, &req)
 	if err != nil {
 		log.Printf("Fusion execution error: %v", err)
@@ -133,6 +141,90 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleStreamingCompletion runs fusion and streams the answer as SSE.
+func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Request, req *types.ChatRequest) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming not supported")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	// Run fusion synchronously (panel + judge must complete first)
+	resp, err := s.engine.Execute(req.Model, req)
+	if err != nil {
+		fmt.Fprintf(w, "data: {\"error\":\"%s\"}\n\n", err.Error())
+		flusher.Flush()
+		return
+	}
+
+	answer := resp.Choices[0].Message.Content
+	if answer == "" {
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+		return
+	}
+
+	// Send analysis metadata as first chunk (non-standard, useful for debugging)
+	if resp.Analysis != nil {
+		analysisJSON, _ := json.Marshal(map[string]interface{}{
+			"type":            "analysis",
+			"consensus_count":  len(resp.Analysis.Consensus),
+			"contradictions":   len(resp.Analysis.Contradictions),
+			"blind_spots":      len(resp.Analysis.BlindSpots),
+			"unique_insights":  len(resp.Analysis.UniqueInsights),
+		})
+		fmt.Fprintf(w, "data: %s\n\n", analysisJSON)
+		flusher.Flush()
+	}
+
+	// Stream the answer content character by character
+	created := time.Now().Unix()
+	for _, ch := range answer {
+		select {
+		case <-r.Context().Done():
+			return
+		default:
+		}
+
+		chunk := types.StreamChunk{
+			ID:      resp.ID,
+			Object:  "chat.completion.chunk",
+			Created: created,
+			Model:   resp.Model,
+			Choices: []types.StreamChoice{{
+				Index: 0,
+				Delta: types.StreamDelta{Content: string(ch)},
+			}},
+		}
+		data, _ := json.Marshal(chunk)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+
+		// Small delay for natural streaming feel (skip for spaces)
+		if ch != ' ' {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	// Send usage as final metadata chunk
+	usageJSON, _ := json.Marshal(map[string]interface{}{
+		"type":            "usage",
+		"prompt_tokens":   resp.Usage.PromptTokens,
+		"completion_tokens": resp.Usage.CompletionTokens,
+		"total_tokens":    resp.Usage.TotalTokens,
+		"cost_usd":        resp.Usage.CostUSD,
+	})
+	fmt.Fprintf(w, "data: %s\n\n", usageJSON)
+
+	// Send termination signal
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
 }
 
 // ---------------------------------------------------------------------------

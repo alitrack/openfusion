@@ -1,0 +1,9 @@
+.git/
+.gitignore
+AGENTS.md
+docs/
+openspec/
+config.yaml
+*.md
+scripts/
+internal/e2e/

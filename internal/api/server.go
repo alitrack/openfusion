@@ -4,11 +4,11 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/lhy/openfusion/internal/logger"
 	"github.com/lhy/openfusion/internal/ratelimit"
 	"github.com/lhy/openfusion/internal/types"
 )
@@ -36,11 +36,12 @@ type PresetSummary struct {
 
 // Server holds the HTTP server dependencies.
 type Server struct {
-	engine     FusionEngine
-	authToken  string
-	port       string
-	mux        *http.ServeMux
+	engine      FusionEngine
+	authToken   string
+	port        string
+	mux         *http.ServeMux
 	rateLimiter *ratelimit.Limiter
+	log         *logger.Logger
 }
 
 // NewServer creates a new API server.
@@ -48,10 +49,11 @@ func NewServer(engine FusionEngine, authToken, addr string, rl *ratelimit.Limite
 	s := &Server{
 		engine:      engine,
 		authToken:   authToken,
+		port:        addr,
 		mux:         http.NewServeMux(),
 		rateLimiter: rl,
+		log:         logger.New(nil).NewModule("api"),
 	}
-
 	s.registerRoutes()
 	return s
 }
@@ -167,7 +169,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if model == "" || model == "auto" || model == "openfusion/auto" {
 		resp, err := s.engine.ExecuteAuto(&req)
 		if err != nil {
-			log.Printf("Auto-route error: %v", err)
+			s.log.Warn("auto-route failed", "error", err.Error())
 			writeError(w, http.StatusInternalServerError, "auto-route failed: "+err.Error())
 			return
 		}
@@ -183,7 +185,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.engine.Execute(req.Model, &req)
 	if err != nil {
-		log.Printf("Fusion execution error: %v", err)
+		s.log.Warn("fusion execution failed", "preset", model, "error", err.Error())
 		writeError(w, http.StatusInternalServerError, "fusion execution failed: "+err.Error())
 		return
 	}

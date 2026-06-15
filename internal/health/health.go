@@ -3,9 +3,11 @@ package health
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"sync/atomic"
 	"time"
+
+	"github.com/lhy/openfusion/internal/logger"
 )
 
 // Checker periodically pings providers and tracks health status.
@@ -113,13 +115,13 @@ func (c *Checker) check(name string, cfg Config, status *ProviderStatus) {
 		}
 		if fail >= threshold {
 			if status.Healthy.Swap(false) {
-				log.Printf("[health] %s → UNHEALTHY (fail %d/%d): %v", name, fail, threshold, err)
+				logger.Warn("provider unhealthy", "name", name, "failures", fmt.Sprintf("%d", fail), "threshold", fmt.Sprintf("%d", threshold), "error", err.Error())
 			}
 		}
 	} else {
 		status.failCount.Store(0)
 		if !status.Healthy.Swap(true) {
-			log.Printf("[health] %s → HEALTHY (recovered)", name)
+			logger.Info("provider recovered", "name", name)
 		}
 	}
 }

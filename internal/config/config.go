@@ -19,6 +19,7 @@ type Config struct {
 	Fusion    FusionConfig            `yaml:"fusion"`
 	RateLimit RateLimitConfig         `yaml:"rate_limit"`
 	Cache     CacheConfig             `yaml:"cache"`
+	Log       LogConfig               `yaml:"log"`
 }
 
 // CacheConfig holds response cache configuration.
@@ -76,6 +77,11 @@ type RateLimitConfig struct {
 type RateLimitPreset struct {
 	Rate  float64 `yaml:"rate"`
 	Burst int     `yaml:"burst"`
+}
+
+// LogConfig controls structured logging.
+type LogConfig struct {
+	Level string `yaml:"level"` // debug, info, warn, error
 }
 
 // DefaultConfig returns a Config with sensible defaults.

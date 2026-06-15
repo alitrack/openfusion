@@ -2,10 +2,10 @@ package skill
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/lhy/openfusion/internal/logger"
 	"github.com/lhy/openfusion/internal/types"
 )
 
@@ -37,7 +37,7 @@ func (r *Registry) LoadDir(dir string) error {
 		if err := r.Add(s); err != nil {
 			return fmt.Errorf("add skill %s: %w", s.Name, err)
 		}
-		log.Printf("  - skill/%s: %s (mode=%s, priority=%d)", s.Name, s.Description, s.Mode, s.Priority)
+		logger.Info("skill registered", "name", s.Name, "desc", s.Description, "mode", string(s.Mode), "priority", fmt.Sprintf("%d", s.Priority))
 	}
 	return nil
 }
@@ -48,13 +48,13 @@ func (r *Registry) LoadPresets(presets []types.Preset) {
 		fromPreset := FromPreset(&p)
 		if existing, ok := r.byName[fromPreset.Name]; ok {
 			// Explicit skill overrides auto-generated one
-			log.Printf("  - preset/%s → auto-skill (overridden by explicit skill/%s)", fromPreset.Name, existing.Name)
+			logger.Info("preset auto-skill", "name", fromPreset.Name, "status", "overridden", "explicit", existing.Name)
 			r.defaults = append(r.defaults, fromPreset)
 			continue
 		}
 		r.byName[fromPreset.Name] = fromPreset
 		r.defaults = append(r.defaults, fromPreset)
-		log.Printf("  - preset/%s → auto-skill (mode=%s)", fromPreset.Name, fromPreset.Mode)
+		logger.Info("preset auto-skill", "name", fromPreset.Name, "mode", string(fromPreset.Mode))
 	}
 
 	// Append defaults to skills list (lower priority)

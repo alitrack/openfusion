@@ -42,7 +42,6 @@ type PresetSummary struct {
 type Server struct {
 	engine      FusionEngine
 	authToken   string
-	port        string
 	mux         *http.ServeMux
 	rateLimiter *ratelimit.Limiter
 	log         *logger.Logger
@@ -53,7 +52,6 @@ func NewServer(engine FusionEngine, authToken, addr string, rl *ratelimit.Limite
 	s := &Server{
 		engine:      engine,
 		authToken:   authToken,
-		port:        addr,
 		mux:         http.NewServeMux(),
 		rateLimiter: rl,
 		log:         logger.New(nil).NewModule("api"),

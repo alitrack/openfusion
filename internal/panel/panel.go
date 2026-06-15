@@ -47,6 +47,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, preset *types.Preset, req *ty
 		return nil
 	}
 
+	// Global timeout for entire dispatch — prevents wg.Wait() blocking forever
+	dispatchTimeout := d.timeout + 30*time.Second
+	ctx, cancel := context.WithTimeout(ctx, dispatchTimeout)
+	defer cancel()
+
 	results := make([]types.PanelResponse, len(preset.Panel))
 	var wg sync.WaitGroup
 

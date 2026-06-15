@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/lhy/openfusion/internal/plugin"
@@ -29,28 +30,29 @@ type Provider interface {
 
 // Manager holds registered provider instances.
 type Manager struct {
+	mu        sync.RWMutex
 	providers map[string]Provider
-	httpClient *http.Client
 }
 
-// NewManager creates a provider manager with the given HTTP client.
+// NewManager creates a provider manager.
 func NewManager() *Manager {
 	return &Manager{
 		providers: make(map[string]Provider),
-		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
-		},
 	}
 }
 
 // Register adds a provider by name.
 func (m *Manager) Register(name string, p Provider) {
+	m.mu.Lock()
 	m.providers[name] = p
+	m.mu.Unlock()
 }
 
 // Get returns a provider by name.
 func (m *Manager) Get(name string) (Provider, error) {
+	m.mu.RLock()
 	p, ok := m.providers[name]
+	m.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("unknown provider: %s", name)
 	}
@@ -63,6 +65,7 @@ func (m *Manager) Get(name string) (Provider, error) {
 
 // OpenAIAdapter calls any OpenAI-compatible /v1/chat/completions endpoint.
 type OpenAIAdapter struct {
+	mu      sync.RWMutex
 	name    string
 	baseURL string
 	apiKey  string
@@ -84,11 +87,15 @@ func NewOpenAIAdapter(name, baseURL, apiKey string) *OpenAIAdapter {
 
 // SetPlugin attaches a model plugin to this adapter.
 func (a *OpenAIAdapter) SetPlugin(p plugin.ModelPlugin) {
+	a.mu.Lock()
 	a.plugin = p
+	a.mu.Unlock()
 }
 
 // Plugin returns the attached plugin, or nil.
 func (a *OpenAIAdapter) Plugin() plugin.ModelPlugin {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	return a.plugin
 }
 
@@ -98,9 +105,12 @@ func (a *OpenAIAdapter) Name() string { return a.name }
 // ChatCompletion sends a chat request to an OpenAI-compatible endpoint.
 func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
 	// Apply plugin TransformRequest
-	if a.plugin != nil {
+	a.mu.RLock()
+	plug := a.plugin
+	a.mu.RUnlock()
+	if plug != nil {
 		var err error
-		req, err = a.plugin.TransformRequest(ctx, req)
+		req, err = plug.TransformRequest(ctx, req)
 		if err != nil {
 			return nil, fmt.Errorf("plugin TransformRequest: %w", err)
 		}
@@ -143,8 +153,11 @@ func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, req *types.ChatReque
 	chatResp.Model = req.Model
 
 	// Apply plugin TransformResponse
-	if a.plugin != nil {
-		chatRespPtr, err := a.plugin.TransformResponse(ctx, &chatResp)
+	a.mu.RLock()
+	plug2 := a.plugin
+	a.mu.RUnlock()
+	if plug2 != nil {
+		chatRespPtr, err := plug2.TransformResponse(ctx, &chatResp)
 		if err != nil {
 			return nil, fmt.Errorf("plugin TransformResponse: %w", err)
 		}

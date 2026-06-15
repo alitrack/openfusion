@@ -70,8 +70,11 @@ func (s *Synthesizer) Synthesize(ctx context.Context, judgeCfg types.JudgeConfig
 	// Attempt to extract structured analysis from the answer
 	result.Analysis = extractAnalysis(answer)
 
-	// Accumulate panel usage (result.Usage already contains judge usage from line 67)
+	// Accumulate panel usage — skip failed members (they have zero or misleading usage)
 	for _, pr := range panelResponses {
+		if pr.Error != "" {
+			continue
+		}
 		result.Usage.PromptTokens += pr.Usage.PromptTokens
 		result.Usage.CompletionTokens += pr.Usage.CompletionTokens
 		result.Usage.TotalTokens += pr.Usage.TotalTokens

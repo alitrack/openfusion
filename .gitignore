@@ -36,6 +36,10 @@ Thumbs.db
 config.yml
 config.yaml
 
+# Review artifacts
+code_review_results.json
+code_review*.json
+
 # Planning docs (openspec + PRD — not committed)
 openspec/
 docs/

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lhy/openfusion/internal/concurrency"
 	"github.com/lhy/openfusion/internal/provider"
 	"github.com/lhy/openfusion/internal/types"
 )
@@ -18,18 +19,25 @@ type HealthChecker interface {
 
 // Dispatcher dispatches a chat request to all panel members in parallel.
 type Dispatcher struct {
-	providerManager *provider.Manager
-	timeout         time.Duration
-	healthChecker   HealthChecker
+	providerManager    *provider.Manager
+	timeout            time.Duration
+	healthChecker      HealthChecker
+	concurrencyManager *concurrency.ProviderConcurrencyManager
 }
 
 // NewDispatcher creates a panel dispatcher.
 func NewDispatcher(pm *provider.Manager, timeout time.Duration, hc HealthChecker) *Dispatcher {
 	return &Dispatcher{
-		providerManager: pm,
-		timeout:         timeout,
-		healthChecker:   hc,
+		providerManager:    pm,
+		timeout:            timeout,
+		healthChecker:      hc,
+		concurrencyManager: concurrency.NewProviderConcurrencyManager(8),
 	}
+}
+
+// SetConcurrencyManager replaces the default concurrency manager.
+func (d *Dispatcher) SetConcurrencyManager(cm *concurrency.ProviderConcurrencyManager) {
+	d.concurrencyManager = cm
 }
 
 // Dispatch sends the request to all panel members concurrently and collects responses.
@@ -58,8 +66,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, preset *types.Preset, req *ty
 func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, req *types.ChatRequest) types.PanelResponse {
 	start := time.Now()
 
+	// Adaptive concurrency: try to acquire a slot
+	limiter := d.concurrencyManager.GetLimiter(member.Provider)
+	if !limiter.TryAcquire() {
+		// At capacity for this provider — skip with degradation notice
+		return types.PanelResponse{
+			Member:   member,
+			Error:    "provider at capacity (concurrency limit)",
+			Duration: time.Since(start),
+		}
+	}
+	defer func() {
+		limiter.Release()
+	}()
+
 	// Health check: skip unhealthy providers
 	if d.healthChecker != nil && !d.healthChecker.IsHealthy(member.Provider) {
+		limiter.RecordResult(false)
 		return types.PanelResponse{
 			Member:   member,
 			Error:    "provider unhealthy (health check)",
@@ -69,6 +92,7 @@ func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, r
 
 	p, err := d.providerManager.Get(member.Provider)
 	if err != nil {
+		limiter.RecordResult(false)
 		return types.PanelResponse{
 			Member:   member,
 			Error:    fmt.Sprintf("provider error: %v", err),
@@ -100,6 +124,7 @@ func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, r
 	duration := time.Since(start)
 
 	if err != nil {
+		limiter.RecordResult(false)
 		if memberCtx.Err() == context.DeadlineExceeded {
 			return types.PanelResponse{
 				Member:   member,
@@ -114,6 +139,8 @@ func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, r
 			Duration: duration,
 		}
 	}
+
+	limiter.RecordResult(true)
 
 	content := ""
 	if len(resp.Choices) > 0 {

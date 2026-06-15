@@ -18,6 +18,15 @@ type Config struct {
 	Presets   PresetConfig            `yaml:"presets"`
 	Fusion    FusionConfig            `yaml:"fusion"`
 	RateLimit RateLimitConfig         `yaml:"rate_limit"`
+	Cache     CacheConfig             `yaml:"cache"`
+}
+
+// CacheConfig holds response cache configuration.
+type CacheConfig struct {
+	Enabled  bool              `yaml:"enabled"`
+	MaxSize  int               `yaml:"max_size"`
+	TTL      string            `yaml:"ttl"` // e.g. "300s"
+	Presets  map[string]string `yaml:"presets,omitempty"` // per-preset TTL, e.g. "budget": "600s"
 }
 
 // ServerConfig holds HTTP server settings.
@@ -28,8 +37,18 @@ type ServerConfig struct {
 
 // ProviderDef defines a single provider endpoint.
 type ProviderDef struct {
-	BaseURL string `yaml:"base_url"`
-	APIKey  string `yaml:"api_key"`
+	BaseURL     string            `yaml:"base_url"`
+	APIKey      string            `yaml:"api_key"`
+	HealthCheck *HealthCheckDef   `yaml:"health_check,omitempty"`
+}
+
+// HealthCheckDef defines health check parameters for a provider.
+type HealthCheckDef struct {
+	Enabled          bool   `yaml:"enabled"`
+	Interval         string `yaml:"interval,omitempty"`   // e.g. "30s"
+	Timeout          string `yaml:"timeout,omitempty"`    // e.g. "10s"
+	Endpoint         string `yaml:"endpoint,omitempty"`
+	FailureThreshold int    `yaml:"failure_threshold,omitempty"`
 }
 
 // PresetConfig holds preset directory and inline items.
@@ -78,6 +97,12 @@ func DefaultConfig() *Config {
 			Enabled: false,
 			Default: RateLimitPreset{Rate: 10, Burst: 20},
 			Presets: make(map[string]RateLimitPreset),
+		},
+		Cache: CacheConfig{
+			Enabled: false,
+			MaxSize: 1000,
+			TTL:     "300s",
+			Presets: make(map[string]string),
 		},
 	}
 }

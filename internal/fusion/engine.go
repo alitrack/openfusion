@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lhy/openfusion/internal/api"
+	"github.com/lhy/openfusion/internal/cache"
 	"github.com/lhy/openfusion/internal/judge"
 	"github.com/lhy/openfusion/internal/metrics"
 	"github.com/lhy/openfusion/internal/panel"
@@ -23,6 +24,7 @@ type Engine struct {
 	judgeSynth     *judge.Synthesizer
 	defaultTimeout time.Duration
 	metrics        *metrics.Collector
+	cache          *cache.Cache
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -33,13 +35,16 @@ func NewEngine(
 	judgeTimeout time.Duration,
 	defaultTimeout time.Duration,
 	mc *metrics.Collector,
+	ca *cache.Cache,
+	hc panel.HealthChecker,
 ) *Engine {
 	return &Engine{
 		presetRegistry: pr,
-		panelDispatch:  panel.NewDispatcher(pm, panelTimeout),
+		panelDispatch:  panel.NewDispatcher(pm, panelTimeout, hc),
 		judgeSynth:     judge.NewSynthesizer(pm, judgeTimeout),
 		defaultTimeout: defaultTimeout,
 		metrics:        mc,
+		cache:          ca,
 	}
 }
 
@@ -102,6 +107,14 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		}
 	}
 
+	// Step 1a: Cache check — generate key and check before judge
+	cacheKey := cache.Key(presetName, req.Messages)
+	if e.cache != nil && e.cache.Enabled() {
+		if cached := e.cache.Get(cacheKey); cached != nil {
+			return cached, nil
+		}
+	}
+
 	// Step 1b: If judge=false, return panel responses directly
 	if req.Judge != nil && !*req.Judge {
 		return buildPanelOnlyResponse(presetName, panelResponses), nil
@@ -132,6 +145,11 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		},
 		Usage:    result.Usage,
 		Analysis: result.Analysis,
+	}
+
+	// Step 3b: Cache the result
+	if e.cache != nil && e.cache.Enabled() {
+		e.cache.Set(cacheKey, resp)
 	}
 
 	return resp, nil

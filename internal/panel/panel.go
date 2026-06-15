@@ -11,17 +11,24 @@ import (
 	"github.com/lhy/openfusion/internal/types"
 )
 
+// HealthChecker is an optional interface for provider health checking.
+type HealthChecker interface {
+	IsHealthy(name string) bool
+}
+
 // Dispatcher dispatches a chat request to all panel members in parallel.
 type Dispatcher struct {
 	providerManager *provider.Manager
 	timeout         time.Duration
+	healthChecker   HealthChecker
 }
 
 // NewDispatcher creates a panel dispatcher.
-func NewDispatcher(pm *provider.Manager, timeout time.Duration) *Dispatcher {
+func NewDispatcher(pm *provider.Manager, timeout time.Duration, hc HealthChecker) *Dispatcher {
 	return &Dispatcher{
 		providerManager: pm,
 		timeout:         timeout,
+		healthChecker:   hc,
 	}
 }
 
@@ -50,6 +57,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, preset *types.Preset, req *ty
 // callMember sends the request to a single panel member with timeout tracking.
 func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, req *types.ChatRequest) types.PanelResponse {
 	start := time.Now()
+
+	// Health check: skip unhealthy providers
+	if d.healthChecker != nil && !d.healthChecker.IsHealthy(member.Provider) {
+		return types.PanelResponse{
+			Member:   member,
+			Error:    "provider unhealthy (health check)",
+			Duration: time.Since(start),
+		}
+	}
 
 	p, err := d.providerManager.Get(member.Provider)
 	if err != nil {

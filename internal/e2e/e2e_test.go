@@ -70,7 +70,7 @@ judge:
 	}
 
 	// Fusion engine
-	engine := fusion.NewEngine(pr, pm, 5, 10, 30, nil)
+	engine := fusion.NewEngine(pr, pm, 5, 10, 30, nil, nil, nil)
 
 	// HTTP API server
 	srv := api.NewServer(engine, "", ":0", nil)

@@ -232,7 +232,6 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
 
 	// Run fusion synchronously (panel + judge must complete first)
 	resp, err := s.engine.Execute(req.Model, req)
@@ -272,15 +271,12 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 		flusher.Flush()
 	}
 
-	// Stream the answer content character by character
+	// Stream answer content using buffered stream with sentence-boundary flush
 	created := time.Now().Unix()
-	for _, ch := range answer {
-		select {
-		case <-r.Context().Done():
-			return
-		default:
-		}
+	buf := NewStreamBuffer(200, 50*time.Millisecond)
+	lastFlush := time.Now()
 
+	flushChunk := func(content string) {
 		chunk := types.StreamChunk{
 			ID:      resp.ID,
 			Object:  "chat.completion.chunk",
@@ -288,26 +284,44 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 			Model:   resp.Model,
 			Choices: []types.StreamChoice{{
 				Index: 0,
-				Delta: types.StreamDelta{Content: string(ch)},
+				Delta: types.StreamDelta{Content: content},
 			}},
 		}
 		data, _ := json.Marshal(chunk)
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
+	}
 
-		// Small delay for natural streaming feel (skip for spaces)
-		if ch != ' ' {
-			time.Sleep(10 * time.Millisecond)
+	for _, ch := range answer {
+		select {
+		case <-r.Context().Done():
+			return
+		default:
 		}
+
+		if flushed := buf.Add(ch); flushed != "" {
+			flushChunk(flushed)
+			lastFlush = time.Now()
+		} else if buf.ShouldFlush(lastFlush) {
+			if content := buf.Finalize(); content != "" {
+				flushChunk(content)
+				lastFlush = time.Now()
+			}
+		}
+	}
+
+	// Flush remaining content
+	if remaining := buf.Finalize(); remaining != "" {
+		flushChunk(remaining)
 	}
 
 	// Send usage as final metadata chunk
 	usageJSON, _ := json.Marshal(map[string]any{
-		"type":            "usage",
-		"prompt_tokens":   resp.Usage.PromptTokens,
+		"type":              "usage",
+		"prompt_tokens":     resp.Usage.PromptTokens,
 		"completion_tokens": resp.Usage.CompletionTokens,
-		"total_tokens":    resp.Usage.TotalTokens,
-		"cost_usd":        resp.Usage.CostUSD,
+		"total_tokens":      resp.Usage.TotalTokens,
+		"cost_usd":          resp.Usage.CostUSD,
 	})
 	fmt.Fprintf(w, "data: %s\n\n", usageJSON)
 

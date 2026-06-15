@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lhy/openfusion/internal/api"
 	"github.com/lhy/openfusion/internal/cache"
 	"github.com/lhy/openfusion/internal/codex"
+	"github.com/lhy/openfusion/internal/config"
 	"github.com/lhy/openfusion/internal/judge"
 	"github.com/lhy/openfusion/internal/metrics"
 	"github.com/lhy/openfusion/internal/panel"
@@ -22,6 +24,7 @@ import (
 
 // Engine implements api.FusionEngine.
 type Engine struct {
+	mu             sync.RWMutex
 	presetRegistry *preset.Registry
 	panelDispatch  *panel.Dispatcher
 	judgeSynth     *judge.Synthesizer
@@ -31,6 +34,8 @@ type Engine struct {
 	tracer         *tracing.Tracer
 	skillMatcher   *skill.Matcher
 	skillExecutor  *skill.Executor
+	providerMgr    *provider.Manager
+	configPath     string
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -57,7 +62,47 @@ func NewEngine(
 		tracer:         tr,
 		skillMatcher:   sm,
 		skillExecutor:  se,
+		providerMgr:    pm,
 	}
+}
+
+// Reload re-reads the config file and hot-swaps engine internals.
+func (e *Engine) Reload(cfgPath string) error {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return fmt.Errorf("reload config: %w", err)
+	}
+
+	newEngine, _, err := buildFromConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("rebuild engine: %w", err)
+	}
+
+	// Atomic swap
+	e.mu.Lock()
+	e.presetRegistry = newEngine.presetRegistry
+	e.panelDispatch = newEngine.panelDispatch
+	e.judgeSynth = newEngine.judgeSynth
+	e.defaultTimeout = newEngine.defaultTimeout
+	e.cache = newEngine.cache
+	e.skillMatcher = newEngine.skillMatcher
+	e.skillExecutor = newEngine.skillExecutor
+	e.providerMgr = newEngine.providerMgr
+	e.mu.Unlock()
+
+	return nil
+}
+
+// getProviderManager returns the current provider manager.
+func (e *Engine) getProviderManager() *provider.Manager {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.providerMgr
+}
+
+// SetConfigPath stores the config path for use by Reload.
+func (e *Engine) SetConfigPath(path string) {
+	e.configPath = path
 }
 
 // ListPresets returns all registered presets as API summaries.

@@ -1,0 +1,16 @@
+name: budget
+description: "平价组合 — Gemini 3 Flash + Kimi K2.6 + DeepSeek V4 Pro → Judge Opus 4.8。DRACO ~64.7 分 @ 50% 成本，接近 Fable 5 性能。"
+panel:
+  - provider: openrouter
+    model: google/gemini-3-flash-preview
+    system: "你是专业研究助手。使用网络搜索和推理能力，给出详实准确的回答。注重全面覆盖和结构化输出。"
+  - provider: openrouter
+    model: moonshotai/kimi-k2.6
+    system: "你是专业研究助手。注重全面覆盖不同角度的信息，擅长发现被忽略的细节。"
+  - provider: openrouter
+    model: deepseek/deepseek-v4-pro
+    system: "你是技术分析专家。注重严谨逻辑、技术深度和精确表述。偏好用具体数据支撑论点。"
+judge:
+  provider: openrouter
+  model: anthropic/claude-opus-latest
+  system: "你是一位严谨的 AI 研究员，擅长对比分析和综合多方观点。提取共识、矛盾、盲区后写出均衡的综合答案。"

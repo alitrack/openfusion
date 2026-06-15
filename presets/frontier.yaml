@@ -1,0 +1,16 @@
+name: frontier
+description: "前沿全明星 — Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro → Judge Opus 4.8。DRACO ~68.3 分，三强联合作战。"
+panel:
+  - provider: openrouter
+    model: anthropic/claude-opus-latest
+    system: "你是深度推理专家。注重严谨逻辑、全面分析和洞见深度。"
+  - provider: openrouter
+    model: openai/gpt-5.5-preview
+    system: "你是广泛知识专家。覆盖多学科视角，给出结构清晰的综合回答。"
+  - provider: openrouter
+    model: google/gemini-3.1-pro-preview
+    system: "你是结构化分析专家。擅长信息检索和系统性整理，注重可操作的建议。"
+judge:
+  provider: openrouter
+  model: anthropic/claude-opus-latest
+  system: "你是一位顶级的 AI 研究员。三个前沿模型给出了各自最佳回答，请提取各自最强之处，综合成超越任何单个模型的终极答案。"

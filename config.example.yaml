@@ -1,0 +1,61 @@
+# OpenFusion Configuration Example
+#
+# Usage:
+#   1. Copy this file to config.yaml
+#   2. Set your API keys (inline or via env vars)
+#   3. Run: openfusion -config config.yaml
+
+server:
+  # Listen address
+  addr: "127.0.0.1:8080"
+  # API authentication token. Set to empty string to disable auth.
+  # auth_token: "your-secret-token"
+
+providers:
+  # OpenRouter — routes to 300+ models, bridges Anthropic/OpenAI/Google protocols
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"  # or paste directly
+
+  # Direct OpenAI access (optional)
+  # openai:
+  #   base_url: "https://api.openai.com/v1"
+  #   api_key: "${OPENAI_API_KEY}"
+
+  # Direct DeepSeek access (optional)
+  # deepseek:
+  #   base_url: "https://api.deepseek.com/v1"
+  #   api_key: "${DEEPSEEK_API_KEY}"
+
+  # Local Ollama (optional)
+  # ollama:
+  #   base_url: "http://localhost:11434/v1"
+  #   api_key: "ollama"  # Ollama ignores API key but requires non-empty
+
+presets:
+  # Directory containing preset YAML files (default: presets/)
+  dir: "presets"
+
+  # Inline presets — defined directly here (optional)
+  items: {}
+  #   my-custom-preset:
+  #     description: "My custom model combo"
+  #     panel:
+  #       - provider: openrouter
+  #         model: anthropic/claude-sonnet-4
+  #         system: "You are a helpful assistant."
+  #       - provider: openrouter
+  #         model: openai/gpt-5.5-preview
+  #         system: "You are a thorough researcher."
+  #     judge:
+  #       provider: openrouter
+  #       model: anthropic/claude-opus-latest
+  #       system: "Synthesize the best answer."
+
+fusion:
+  # Default timeout for the entire fusion call (seconds)
+  default_timeout: 120
+  # Max concurrent panel calls (default: 8)
+  max_concurrent: 8
+  # Per-model panel timeout (seconds)
+  panel_timeout_per_model: 60

@@ -71,6 +71,13 @@ type Preset struct {
 	Judge       JudgeConfig   `yaml:"judge" json:"judge"`
 }
 
+// InlinePreset is used for presets defined inline (embedded in config.yaml).
+type InlinePreset struct {
+	Description string        `yaml:"description" json:"description"`
+	Panel       []PanelMember `yaml:"panel" json:"panel"`
+	Judge       JudgeConfig   `yaml:"judge" json:"judge"`
+}
+
 // PanelResponse holds the response from a single panel member.
 type PanelResponse struct {
 	Member   PanelMember `json:"member"`

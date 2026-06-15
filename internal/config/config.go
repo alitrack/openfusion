@@ -33,15 +33,8 @@ type ProviderDef struct {
 
 // PresetConfig holds preset directory and inline items.
 type PresetConfig struct {
-	Dir   string                  `yaml:"dir"`
-	Items map[string]PresetInline `yaml:"items,omitempty"`
-}
-
-// PresetInline is used for presets defined directly in config.yaml.
-type PresetInline struct {
-	Description string                `yaml:"description"`
-	Panel       []types.PanelMember   `yaml:"panel"`
-	Judge       types.JudgeConfig     `yaml:"judge"`
+	Dir   string                     `yaml:"dir"`
+	Items map[string]types.InlinePreset `yaml:"items,omitempty"`
 }
 
 // FusionConfig holds fusion engine tuning parameters.
@@ -60,7 +53,7 @@ func DefaultConfig() *Config {
 		Providers: make(map[string]ProviderDef),
 		Presets: PresetConfig{
 			Dir:   "presets",
-			Items: make(map[string]PresetInline),
+			Items: make(map[string]types.InlinePreset),
 		},
 		Fusion: FusionConfig{
 			DefaultTimeout:       120,

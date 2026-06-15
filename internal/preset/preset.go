@@ -80,7 +80,7 @@ func (r *Registry) LoadDir(dir string) error {
 }
 
 // LoadInline presets from config inline definitions.
-func (r *Registry) LoadInline(items map[string]ConfigInlinePreset) error {
+func (r *Registry) LoadInline(items map[string]types.InlinePreset) error {
 	for name, item := range items {
 		p := &types.Preset{
 			Name:        name,
@@ -93,13 +93,6 @@ func (r *Registry) LoadInline(items map[string]ConfigInlinePreset) error {
 		}
 	}
 	return nil
-}
-
-// ConfigInlinePreset is the shape used in config.yaml for inline presets.
-type ConfigInlinePreset struct {
-	Description string              `yaml:"description"`
-	Panel       []types.PanelMember `yaml:"panel"`
-	Judge       types.JudgeConfig   `yaml:"judge"`
 }
 
 // loadFile reads a single preset YAML file.

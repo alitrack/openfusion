@@ -59,3 +59,14 @@ fusion:
   max_concurrent: 8
   # Per-model panel timeout (seconds)
   panel_timeout_per_model: 60
+
+# Rate limiting — per-preset token bucket
+# rate_limit:
+#   enabled: true
+#   default:
+#     rate: 10            # requests per second
+#     burst: 20           # max burst
+#   presets:
+#     frontier:
+#       rate: 2
+#       burst: 5

@@ -17,6 +17,7 @@ type Config struct {
 	Providers map[string]ProviderDef  `yaml:"providers"`
 	Presets   PresetConfig            `yaml:"presets"`
 	Fusion    FusionConfig            `yaml:"fusion"`
+	RateLimit RateLimitConfig         `yaml:"rate_limit"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -39,9 +40,22 @@ type PresetConfig struct {
 
 // FusionConfig holds fusion engine tuning parameters.
 type FusionConfig struct {
-	DefaultTimeout      int `yaml:"default_timeout"`
-	MaxConcurrent       int `yaml:"max_concurrent"`
+	DefaultTimeout       int `yaml:"default_timeout"`
+	MaxConcurrent        int `yaml:"max_concurrent"`
 	PanelTimeoutPerModel int `yaml:"panel_timeout_per_model"`
+}
+
+// RateLimitConfig holds rate limiting configuration.
+type RateLimitConfig struct {
+	Enabled bool                      `yaml:"enabled"`
+	Default RateLimitPreset           `yaml:"default"`
+	Presets map[string]RateLimitPreset `yaml:"presets,omitempty"`
+}
+
+// RateLimitPreset defines rate and burst for one or all presets.
+type RateLimitPreset struct {
+	Rate  float64 `yaml:"rate"`
+	Burst int     `yaml:"burst"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -59,6 +73,11 @@ func DefaultConfig() *Config {
 			DefaultTimeout:       120,
 			MaxConcurrent:        8,
 			PanelTimeoutPerModel: 60,
+		},
+		RateLimit: RateLimitConfig{
+			Enabled: false,
+			Default: RateLimitPreset{Rate: 10, Burst: 20},
+			Presets: make(map[string]RateLimitPreset),
 		},
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lhy/openfusion/internal/ratelimit"
 	"github.com/lhy/openfusion/internal/types"
 )
 
@@ -33,18 +34,20 @@ type PresetSummary struct {
 
 // Server holds the HTTP server dependencies.
 type Server struct {
-	engine FusionEngine
-	authToken string
-	port     string
-	mux      *http.ServeMux
+	engine     FusionEngine
+	authToken  string
+	port       string
+	mux        *http.ServeMux
+	rateLimiter *ratelimit.Limiter
 }
 
 // NewServer creates a new API server.
-func NewServer(engine FusionEngine, authToken, addr string) *Server {
+func NewServer(engine FusionEngine, authToken, addr string, rl *ratelimit.Limiter) *Server {
 	s := &Server{
-		engine:    engine,
-		authToken: authToken,
-		mux:       http.NewServeMux(),
+		engine:      engine,
+		authToken:   authToken,
+		mux:         http.NewServeMux(),
+		rateLimiter: rl,
 	}
 
 	s.registerRoutes()
@@ -142,6 +145,19 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if req.Model == "" {
 		writeError(w, http.StatusBadRequest, "model field is required")
 		return
+	}
+
+	// Rate limit check
+	if s.rateLimiter != nil && s.rateLimiter.Enabled() {
+		allowed, retryAfter := s.rateLimiter.Allow(req.Model)
+		if !allowed {
+			w.Header().Set("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
+			writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{
+				"error":              fmt.Sprintf("rate limit exceeded for preset '%s'", req.Model),
+				"retry_after_seconds": retryAfter.Seconds(),
+			})
+			return
+		}
 	}
 
 	// Handle streaming

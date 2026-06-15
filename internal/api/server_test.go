@@ -53,8 +53,7 @@ func TestListModels(t *testing.T) {
 			{ID: "openfusion/quality", Object: "model", OwnedBy: "openfusion"},
 		},
 	}
-	srv := NewServer(engine, "", ":8080")
-
+	srv := NewServer(engine, "", ":8080", nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/v1/models", nil)
 	srv.Handler().ServeHTTP(rec, req)
@@ -73,8 +72,7 @@ func TestListModels(t *testing.T) {
 
 func TestChatCompletions_HappyPath(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080")
-
+	srv := NewServer(engine, "", ":8080", nil)
 	payload := `{"model":"openfusion/budget","messages":[{"role":"user","content":"hello"}]}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(payload))
@@ -99,8 +97,7 @@ func TestChatCompletions_HappyPath(t *testing.T) {
 
 func TestChatCompletions_EmptyMessages(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080")
-
+	srv := NewServer(engine, "", ":8080", nil)
 	payload := `{"model":"test","messages":[]}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(payload))
@@ -114,8 +111,7 @@ func TestChatCompletions_EmptyMessages(t *testing.T) {
 
 func TestChatCompletions_NoModel(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080")
-
+	srv := NewServer(engine, "", ":8080", nil)
 	payload := `{"messages":[{"role":"user","content":"hi"}]}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(payload))
@@ -129,8 +125,7 @@ func TestChatCompletions_NoModel(t *testing.T) {
 
 func TestAuthMiddleware(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "secret123", ":8080")
-
+	srv := NewServer(engine, "secret123", ":8080", nil)
 	t.Run("no auth header", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/v1/models", nil)

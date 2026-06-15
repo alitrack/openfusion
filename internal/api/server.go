@@ -27,6 +27,12 @@ type FusionEngine interface {
 	ListPresets() []PresetSummary
 	// Metrics returns the metrics collector for snapshot retrieval.
 	Metrics() interface{} // returns *metrics.Collector or nil
+	// CreatePreset adds a new preset at runtime.
+	CreatePreset(name string, preset types.Preset) error
+	// DeletePreset removes a preset by name.
+	DeletePreset(name string) error
+	// GetPreset returns the full preset detail by name.
+	GetPreset(name string) (*types.Preset, error)
 }
 
 // PresetSummary is the public view of a preset.
@@ -74,6 +80,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /v1/dashboard", s.handleDashboard)
 	s.mux.HandleFunc("GET /", s.handleDashboard)
 	s.mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
+	s.mux.HandleFunc("GET /v1/presets", s.handleListPresetsDetail)
+	s.mux.HandleFunc("POST /v1/presets", s.handleCreatePreset)
+	s.mux.HandleFunc("GET /v1/presets/{name}", s.handleGetPreset)
+	s.mux.HandleFunc("DELETE /v1/presets/{name}", s.handleDeletePreset)
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +152,128 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(dashboardHTML))
+}
+
+// ---------------------------------------------------------------------------
+// Preset CRUD handlers
+// ---------------------------------------------------------------------------
+
+func (s *Server) handleListPresetsDetail(w http.ResponseWriter, r *http.Request) {
+	presets := s.engine.ListPresets()
+	// Also get full detail for each where possible
+	items := make([]map[string]interface{}, 0, len(presets))
+	for _, p := range presets {
+		item := map[string]interface{}{
+			"id":          p.ID,
+			"object":       p.Object,
+			"created":      p.Created,
+			"owned_by":     p.OwnedBy,
+			"description":  p.Description,
+		}
+		// Try to get full detail
+		name := strings.TrimPrefix(p.ID, "openfusion/")
+		if detail, err := s.engine.GetPreset(name); err == nil && detail != nil {
+			item["panel"] = detail.Panel
+			item["judge"] = detail.Judge
+		}
+		items = append(items, item)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"object": "list",
+		"total":  len(items),
+		"data":   items,
+	})
+}
+
+type createPresetRequest struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description,omitempty"`
+	Panel       []types.PanelMember `json:"panel"`
+	Judge       types.JudgeConfig   `json:"judge"`
+}
+
+func (s *Server) handleCreatePreset(w http.ResponseWriter, r *http.Request) {
+	var req createPresetRequest
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if len(req.Panel) == 0 {
+		writeError(w, http.StatusBadRequest, "panel must have at least one member")
+		return
+	}
+	for i, m := range req.Panel {
+		if m.Provider == "" || m.Model == "" {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("panel[%d]: provider and model are required", i))
+			return
+		}
+	}
+	if req.Judge.Provider == "" || req.Judge.Model == "" {
+		writeError(w, http.StatusBadRequest, "judge: provider and model are required")
+		return
+	}
+
+	preset := types.Preset{
+		Name:        req.Name,
+		Description: req.Description,
+		Panel:       req.Panel,
+		Judge:       req.Judge,
+	}
+
+	if err := s.engine.CreatePreset(req.Name, preset); err != nil {
+		s.log.Warn("create preset failed", "name", req.Name, "error", err.Error())
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"id":     "openfusion/" + req.Name,
+		"object": "model",
+		"created": time.Now().Unix(),
+	})
+}
+
+func (s *Server) handleGetPreset(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	preset, err := s.engine.GetPreset(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("preset not found: %s", name))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id":          "openfusion/" + name,
+		"object":      "model",
+		"description": preset.Description,
+		"panel":       preset.Panel,
+		"judge":       preset.Judge,
+	})
+}
+
+func (s *Server) handleDeletePreset(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	if err := s.engine.DeletePreset(name); err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("preset not found: %s", name))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +19,7 @@ import (
 type mockEngine struct {
 	executeFunc func(string, *types.ChatRequest) (*types.ChatResponse, error)
 	presets     []PresetSummary
+	store       map[string]types.Preset
 }
 
 func (m *mockEngine) Execute(preset string, req *types.ChatRequest) (*types.ChatResponse, error) {
@@ -45,6 +47,49 @@ func (m *mockEngine) ListPresets() []PresetSummary {
 
 func (m *mockEngine) Metrics() interface{} {
 	return nil
+}
+
+func (m *mockEngine) CreatePreset(name string, preset types.Preset) error {
+	if m.store == nil {
+		m.store = make(map[string]types.Preset)
+	}
+	if _, exists := m.store[name]; exists {
+		return fmt.Errorf("preset already exists: %s", name)
+	}
+	m.store[name] = preset
+	m.presets = append(m.presets, PresetSummary{
+		ID:     "openfusion/" + name,
+		Object: "model",
+	})
+	return nil
+}
+
+func (m *mockEngine) DeletePreset(name string) error {
+	if m.store == nil {
+		return fmt.Errorf("not found: %s", name)
+	}
+	if _, exists := m.store[name]; !exists {
+		return fmt.Errorf("not found: %s", name)
+	}
+	delete(m.store, name)
+	for i, p := range m.presets {
+		if p.ID == "openfusion/"+name {
+			m.presets = append(m.presets[:i], m.presets[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+func (m *mockEngine) GetPreset(name string) (*types.Preset, error) {
+	if m.store == nil {
+		return nil, fmt.Errorf("not found: %s", name)
+	}
+	p, exists := m.store[name]
+	if !exists {
+		return nil, fmt.Errorf("not found: %s", name)
+	}
+	return &p, nil
 }
 
 // ---------------------------------------------------------------------------

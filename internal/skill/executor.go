@@ -10,6 +10,7 @@ import (
 	"github.com/lhy/openfusion/internal/judge"
 	"github.com/lhy/openfusion/internal/panel"
 	"github.com/lhy/openfusion/internal/provider"
+	"github.com/lhy/openfusion/internal/search"
 	"github.com/lhy/openfusion/internal/types"
 )
 
@@ -117,6 +118,15 @@ func (e *Executor) executeSelfEnsemble(ctx context.Context, s *Skill, req *types
 		base := pm.ToBase()
 		preset.Panel = append(preset.Panel, base)
 	}
+
+	// Propagate web search config from skill to preset
+	if s.Strategy.WebSearch != nil {
+		ws := *s.Strategy.WebSearch
+		preset.WebSearch = &ws
+	}
+
+	// Apply search context injection
+	req.Messages = search.AddSearchContext(req.Messages, preset.WebSearch)
 
 	// Dispatch panel
 	panelResponses := e.panelDispatcher.Dispatch(ctx, preset, req)

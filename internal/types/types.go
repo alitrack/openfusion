@@ -136,12 +136,24 @@ type JudgeConfig struct {
 	SystemPrompt string `yaml:"system,omitempty" json:"system,omitempty"`
 }
 
+// WebSearchConfig defines web search behavior for a skill/preset.
+type WebSearchConfig struct {
+	Enabled          bool   `yaml:"enabled" json:"enabled"`
+	Queries          int    `yaml:"queries,omitempty" json:"queries,omitempty"`
+	MaxResults       int    `yaml:"max_results,omitempty" json:"max_results,omitempty"`
+	MaxContextLength int    `yaml:"max_context_length,omitempty" json:"max_context_length,omitempty"`
+	Backend          string `yaml:"backend,omitempty" json:"backend,omitempty"` // brave, custom
+	APIKey           string `yaml:"api_key,omitempty" json:"-"`                 // never serialized
+	CustomEndpoint   string `yaml:"custom_endpoint,omitempty" json:"custom_endpoint,omitempty"`
+}
+
 // Preset defines a named panel + judge combination.
 type Preset struct {
 	Name        string        `yaml:"name" json:"name"`
 	Description string        `yaml:"description" json:"description"`
 	Panel       []PanelMember `yaml:"panel" json:"panel"`
 	Judge       JudgeConfig   `yaml:"judge" json:"judge"`
+	WebSearch   *WebSearchConfig `yaml:"web_search,omitempty" json:"web_search,omitempty"`
 }
 
 // InlinePreset is used for presets defined inline (embedded in config.yaml).

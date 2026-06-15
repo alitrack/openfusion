@@ -46,6 +46,18 @@ func (r *Registry) Get(name string) (*types.Preset, bool) {
 	return p, ok
 }
 
+// Remove deletes a preset by name. Returns error if not found.
+func (r *Registry) Remove(name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	name = normalizeName(name)
+	if _, exists := r.presets[name]; !exists {
+		return fmt.Errorf("preset not found: %s", name)
+	}
+	delete(r.presets, name)
+	return nil
+}
+
 // List returns all registered preset names with descriptions.
 func (r *Registry) List() []types.Preset {
 	r.mu.RLock()

@@ -198,6 +198,9 @@ type Strategy struct {
 
 	// Judge configuration
 	Judge JudgeConfig `yaml:"judge" json:"judge"`
+
+	// WebSearch configures web search context injection.
+	WebSearch *types.WebSearchConfig `yaml:"web_search,omitempty" json:"web_search,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

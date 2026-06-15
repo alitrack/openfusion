@@ -17,6 +17,7 @@ import (
 	"github.com/lhy/openfusion/internal/panel"
 	"github.com/lhy/openfusion/internal/preset"
 	"github.com/lhy/openfusion/internal/provider"
+	"github.com/lhy/openfusion/internal/search"
 	"github.com/lhy/openfusion/internal/skill"
 	"github.com/lhy/openfusion/internal/tracing"
 	"github.com/lhy/openfusion/internal/types"
@@ -129,6 +130,33 @@ func (e *Engine) Metrics() interface{} {
 	return e.metrics.Snapshot()
 }
 
+// CreatePreset adds a new preset at runtime.
+func (e *Engine) CreatePreset(name string, preset types.Preset) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	p := preset
+	p.Name = name
+	return e.presetRegistry.Register(&p)
+}
+
+// DeletePreset removes a preset by name.
+func (e *Engine) DeletePreset(name string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.presetRegistry.Remove(name)
+}
+
+// GetPreset returns a preset by name.
+func (e *Engine) GetPreset(name string) (*types.Preset, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	p, ok := e.presetRegistry.Get(name)
+	if !ok {
+		return nil, fmt.Errorf("preset not found: %s", name)
+	}
+	return p, nil
+}
+
 // ExecuteAuto uses skill matching to automatically route a request.
 // Falls back to the default preset if no skill matches.
 func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error) {
@@ -222,6 +250,12 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 			return cached, nil
 		}
 	}
+
+	// Step 0.5: Web search context injection
+	searchMessages := search.AddSearchContext(req.Messages, p.WebSearch)
+	searchReq := *req
+	searchReq.Messages = searchMessages
+	req = &searchReq
 
 	// Step 1: Dispatch panel in parallel
 	var panelSpan tracing.Span
@@ -394,6 +428,10 @@ func deepCopyPreset(p *types.Preset) *types.Preset {
 	if len(p.Panel) > 0 {
 		cp.Panel = make([]types.PanelMember, len(p.Panel))
 		copy(cp.Panel, p.Panel)
+	}
+	if p.WebSearch != nil {
+		w := *p.WebSearch
+		cp.WebSearch = &w
 	}
 	return cp
 }

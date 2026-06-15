@@ -1,0 +1,210 @@
+package skill
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/lhy/openfusion/internal/judge"
+	"github.com/lhy/openfusion/internal/panel"
+	"github.com/lhy/openfusion/internal/provider"
+	"github.com/lhy/openfusion/internal/types"
+)
+
+// ---------------------------------------------------------------------------
+// Executor
+// ---------------------------------------------------------------------------
+
+// Executor runs skills: translates a Skill definition into actual model calls.
+type Executor struct {
+	providerManager *provider.Manager
+	panelDispatcher *panel.Dispatcher
+	judgeSynth      *judge.Synthesizer
+	defaultTimeout  time.Duration
+}
+
+// NewExecutor creates a skill executor.
+func NewExecutor(pm *provider.Manager, pd *panel.Dispatcher, js *judge.Synthesizer, timeout time.Duration) *Executor {
+	return &Executor{
+		providerManager: pm,
+		panelDispatcher: pd,
+		judgeSynth:      js,
+		defaultTimeout:  timeout,
+	}
+}
+
+// Execute runs a skill against a request and returns the response.
+func (e *Executor) Execute(ctx context.Context, s *Skill, req *types.ChatRequest) (*types.ChatResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, e.defaultTimeout)
+	defer cancel()
+
+	switch s.Mode {
+	case ModeDirect:
+		return e.executeDirect(ctx, s, req)
+	case ModeSelfEnsemble:
+		return e.executeSelfEnsemble(ctx, s, req)
+	case ModeFusion:
+		return e.executeFusion(ctx, s, req)
+	default:
+		return nil, fmt.Errorf("unknown skill mode: %s", s.Mode)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Direct mode
+// ---------------------------------------------------------------------------
+
+func (e *Executor) executeDirect(ctx context.Context, s *Skill, req *types.ChatRequest) (*types.ChatResponse, error) {
+	p, err := e.providerManager.Get(s.Strategy.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("direct: provider %s: %w", s.Strategy.Provider, err)
+	}
+
+	panelReq := buildPanelRequest(s, req, s.Strategy.Provider, s.Strategy.Model, s.Strategy.System)
+	start := time.Now()
+
+	resp, err := p.ChatCompletion(ctx, panelReq)
+	if err != nil {
+		return nil, fmt.Errorf("direct: chat completion: %w", err)
+	}
+	_ = start // for future metrics
+
+	return resp, nil
+}
+
+// ---------------------------------------------------------------------------
+// Self-ensemble mode
+// ---------------------------------------------------------------------------
+
+func (e *Executor) executeSelfEnsemble(ctx context.Context, s *Skill, req *types.ChatRequest) (*types.ChatResponse, error) {
+	preset := &types.Preset{
+		Name:        s.Name,
+		Description: s.Description,
+		Judge:       toJudgeConfig(s.Strategy.Judge),
+	}
+
+	for _, pm := range s.Strategy.Panel {
+		preset.Panel = append(preset.Panel, pm.PanelMember)
+	}
+
+	// Dispatch panel
+	panelResponses := e.panelDispatcher.Dispatch(ctx, preset, req)
+
+	// If judge is disabled, return raw panel responses
+	if !s.Strategy.Judge.Enabled {
+		return buildPanelOnlyResponse(s.Name, panelResponses), nil
+	}
+
+	// Extract user prompt
+	prompt := extractLastUserMessage(req.Messages)
+	if prompt == "" {
+		prompt = req.Messages[len(req.Messages)-1].Content
+	}
+
+	// Run judge synthesis
+	judgeCfg := toJudgeConfig(s.Strategy.Judge)
+	result, err := e.judgeSynth.Synthesize(ctx, judgeCfg, prompt, panelResponses)
+	if err != nil {
+		return nil, fmt.Errorf("self-ensemble judge: %w", err)
+	}
+
+	return &types.ChatResponse{
+		ID:      fmt.Sprintf("ofusion_skill_%d", time.Now().UnixNano()),
+		Object:  "chat.completion",
+		Model:   "openfusion/" + s.Name,
+		Choices: []types.Choice{{Index: 0, Message: types.ChatMessage{Role: "assistant", Content: result.Answer}}},
+		Usage:   result.Usage,
+		Analysis: result.Analysis,
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Fusion mode
+// ---------------------------------------------------------------------------
+
+func (e *Executor) executeFusion(ctx context.Context, s *Skill, req *types.ChatRequest) (*types.ChatResponse, error) {
+	return e.executeSelfEnsemble(ctx, s, req)
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// buildPanelRequest creates a single-model ChatRequest for direct mode.
+func buildPanelRequest(s *Skill, req *types.ChatRequest, provider, model, system string) *types.ChatRequest {
+	panelReq := &types.ChatRequest{
+		Model:       model,
+		MaxTokens:   s.Params.MaxTokens,
+		Temperature: s.Params.Temperature,
+	}
+
+	if panelReq.MaxTokens == 0 {
+		panelReq.MaxTokens = req.MaxTokens
+	}
+	if panelReq.Temperature == nil {
+		panelReq.Temperature = req.Temperature
+	}
+	if panelReq.Temperature == nil || *panelReq.Temperature == 0 {
+		t := 0.3
+		panelReq.Temperature = &t
+	}
+
+	// Prepend system message
+	if system != "" {
+		panelReq.Messages = append([]types.ChatMessage{
+			{Role: "system", Content: system},
+		}, req.Messages...)
+	} else {
+		panelReq.Messages = req.Messages
+	}
+
+	return panelReq
+}
+
+// toJudgeConfig converts skill.JudgeConfig to types.JudgeConfig.
+func toJudgeConfig(jc JudgeConfig) types.JudgeConfig {
+	return types.JudgeConfig{
+		Provider:     jc.Provider,
+		Model:        jc.Model,
+		SystemPrompt: jc.SystemPrompt,
+	}
+}
+
+// buildPanelOnlyResponse constructs a response with raw panel outputs (no judge).
+func buildPanelOnlyResponse(name string, responses []types.PanelResponse) *types.ChatResponse {
+	var b strings.Builder
+	totalUsage := types.Usage{}
+
+	for _, pr := range responses {
+		b.WriteString("=== ")
+		b.WriteString(pr.Member.Model)
+		b.WriteString(" ===\n")
+		if pr.Error != "" {
+			b.WriteString("[ERROR: ")
+			b.WriteString(pr.Error)
+			b.WriteString("]\n")
+		} else {
+			b.WriteString(pr.Content)
+		}
+		b.WriteString("\n\n")
+
+		if pr.Error == "" && !pr.TimedOut {
+			totalUsage.PromptTokens += pr.Usage.PromptTokens
+			totalUsage.CompletionTokens += pr.Usage.CompletionTokens
+			totalUsage.TotalTokens += pr.Usage.TotalTokens
+			totalUsage.CostUSD += pr.Usage.CostUSD
+		}
+	}
+
+	return &types.ChatResponse{
+		ID:      fmt.Sprintf("ofusion_skill_%d", time.Now().UnixNano()),
+		Object:  "chat.completion",
+		Model:   "openfusion/" + name,
+		Choices: []types.Choice{{Index: 0, Message: types.ChatMessage{Role: "assistant", Content: strings.TrimSpace(b.String())}}},
+		Usage:   totalUsage,
+	}
+}

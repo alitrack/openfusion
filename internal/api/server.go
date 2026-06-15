@@ -17,6 +17,8 @@ import (
 type FusionEngine interface {
 	// Execute runs a fusion request against the named preset.
 	Execute(presetName string, req *types.ChatRequest) (*types.ChatResponse, error)
+	// ExecuteAuto uses skill matching to automatically route the request.
+	ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error)
 	// ListPresets returns all available preset summaries.
 	ListPresets() []PresetSummary
 	// Metrics returns the metrics collector for snapshot retrieval.
@@ -158,6 +160,19 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+	}
+
+	// Auto-route via skill matching when model is auto/empty
+	model := req.Model
+	if model == "" || model == "openfusion/auto" {
+		resp, err := s.engine.ExecuteAuto(&req)
+		if err != nil {
+			log.Printf("Auto-route error: %v", err)
+			writeError(w, http.StatusInternalServerError, "auto-route failed: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
 	}
 
 	// Handle streaming

@@ -14,6 +14,7 @@ import (
 	"github.com/lhy/openfusion/internal/panel"
 	"github.com/lhy/openfusion/internal/preset"
 	"github.com/lhy/openfusion/internal/provider"
+	"github.com/lhy/openfusion/internal/skill"
 	"github.com/lhy/openfusion/internal/tracing"
 	"github.com/lhy/openfusion/internal/types"
 )
@@ -27,6 +28,8 @@ type Engine struct {
 	metrics        *metrics.Collector
 	cache          *cache.Cache
 	tracer         *tracing.Tracer
+	skillMatcher   *skill.Matcher
+	skillExecutor  *skill.Executor
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -40,6 +43,8 @@ func NewEngine(
 	ca *cache.Cache,
 	hc panel.HealthChecker,
 	tr *tracing.Tracer,
+	sm *skill.Matcher,
+	se *skill.Executor,
 ) *Engine {
 	return &Engine{
 		presetRegistry: pr,
@@ -49,6 +54,8 @@ func NewEngine(
 		metrics:        mc,
 		cache:          ca,
 		tracer:         tr,
+		skillMatcher:   sm,
+		skillExecutor:  se,
 	}
 }
 
@@ -74,6 +81,51 @@ func (e *Engine) Metrics() interface{} {
 		return nil
 	}
 	return e.metrics.Snapshot()
+}
+
+// ExecuteAuto uses skill matching to automatically route a request.
+// Falls back to the default preset if no skill matches.
+func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error) {
+	// No skill system initialized — fall back to preset
+	if e.skillMatcher == nil || e.skillExecutor == nil {
+		presets := e.presetRegistry.List()
+		if len(presets) > 0 {
+			return e.Execute(presets[0].Name, req)
+		}
+		return nil, fmt.Errorf("skill system not initialized and no fallback preset available")
+	}
+
+	// Analyze request features
+	features := skill.AnalyzeRequest(req)
+
+	// Match skill
+	matched := e.skillMatcher.Match(features)
+	if matched == nil {
+		// No skill matched — fall back to default fusion
+		fallback := e.skillMatcher.DefaultRef()
+		if fallback == "" || fallback == "direct" {
+			// Use first available preset as fallback
+			presets := e.presetRegistry.List()
+			if len(presets) > 0 {
+				return e.Execute(presets[0].Name, req)
+			}
+			return nil, fmt.Errorf("no skills matched and no fallback preset available")
+		}
+		return e.Execute(fallback, req)
+	}
+
+	if e.metrics != nil {
+		e.metrics.RecordRequest(matched.Name)
+	}
+
+	// Execute skill
+	ctx := context.Background()
+	resp, err := e.skillExecutor.Execute(ctx, matched, req)
+	if err != nil {
+		return nil, fmt.Errorf("skill '%s' execution: %w", matched.Name, err)
+	}
+
+	return resp, nil
 }
 
 // Execute runs the full fusion pipeline: panel → judge → response.

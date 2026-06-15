@@ -34,6 +34,10 @@ func (m *mockEngine) Execute(preset string, req *types.ChatRequest) (*types.Chat
 	}, nil
 }
 
+func (m *mockEngine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error) {
+	return m.Execute("openfusion/auto", req)
+}
+
 func (m *mockEngine) ListPresets() []PresetSummary {
 	return m.presets
 }

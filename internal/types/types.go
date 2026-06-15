@@ -15,12 +15,19 @@ type ChatMessage struct {
 
 // ChatRequest is the incoming request following the OpenAI chat.completions format.
 type ChatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Temperature float64       `json:"temperature,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
-	Judge       *bool         `json:"judge,omitempty"`
+	Model          string            `json:"model"`
+	Messages       []ChatMessage     `json:"messages"`
+	MaxTokens      int               `json:"max_tokens,omitempty"`
+	Temperature    *float64          `json:"temperature,omitempty"`
+	Stream         bool              `json:"stream,omitempty"`
+	Judge          *bool             `json:"judge,omitempty"`
+	Tools          []interface{}     `json:"tools,omitempty"`
+	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
+}
+
+// ResponseFormat controls structured output.
+type ResponseFormat struct {
+	Type string `json:"type"` // "text" or "json_object"
 }
 
 // StreamChunk represents a single SSE data chunk in OpenAI format.

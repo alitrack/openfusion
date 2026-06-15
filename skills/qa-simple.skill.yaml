@@ -1,0 +1,22 @@
+name: qa-simple
+description: "简单问答 — 直出模式，适用于问候、翻译、简单查询"
+triggers:
+  - tokens: "<300"
+    categories: "greeting|general|translation"
+  - tokens: "<1000"
+    categories: "general"
+
+mode: direct
+strategy:
+  provider: local-ds
+  model: deepseek-v4-flash
+  system: "你是友善的 AI 助手。回答简洁、准确、直接。"
+  judge:
+    enabled: false
+
+params:
+  temperature: 0.0
+  think: false
+  max_tokens: 1024
+
+priority: 100

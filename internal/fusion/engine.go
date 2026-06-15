@@ -14,6 +14,7 @@ import (
 	"github.com/lhy/openfusion/internal/panel"
 	"github.com/lhy/openfusion/internal/preset"
 	"github.com/lhy/openfusion/internal/provider"
+	"github.com/lhy/openfusion/internal/tracing"
 	"github.com/lhy/openfusion/internal/types"
 )
 
@@ -25,6 +26,7 @@ type Engine struct {
 	defaultTimeout time.Duration
 	metrics        *metrics.Collector
 	cache          *cache.Cache
+	tracer         *tracing.Tracer
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -37,6 +39,7 @@ func NewEngine(
 	mc *metrics.Collector,
 	ca *cache.Cache,
 	hc panel.HealthChecker,
+	tr *tracing.Tracer,
 ) *Engine {
 	return &Engine{
 		presetRegistry: pr,
@@ -45,6 +48,7 @@ func NewEngine(
 		defaultTimeout: defaultTimeout,
 		metrics:        mc,
 		cache:          ca,
+		tracer:         tr,
 	}
 }
 
@@ -79,12 +83,23 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		return nil, fmt.Errorf("unknown model: %s", presetName)
 	}
 
+	ctx := context.Background()
+
+	// Start root tracing span
+	if e.tracer != nil && e.tracer.Enabled() {
+		ctx, _ = e.tracer.StartSpan(ctx, "Fusion.Execute",
+			tracing.AttrPreset.String(presetName),
+			tracing.AttrPanelCount.Int(len(p.Panel)),
+			tracing.AttrJudgeModel.String(p.Judge.Model),
+		)
+	}
+
 	if e.metrics != nil {
 		e.metrics.RecordRequest(presetName)
 	}
 	start := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), e.defaultTimeout)
+	ctx, cancel := context.WithTimeout(ctx, e.defaultTimeout)
 	defer cancel()
 
 	// Extract the user's primary prompt (last user message)
@@ -97,7 +112,17 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	}
 
 	// Step 1: Dispatch panel in parallel
+	var panelSpan tracing.Span
+	if e.tracer != nil && e.tracer.Enabled() {
+		ctx, panelSpan = e.tracer.StartSpan(ctx, "panel.dispatch",
+			tracing.AttrPreset.String(presetName),
+			tracing.AttrPanelCount.Int(len(p.Panel)),
+		)
+	}
 	panelResponses := e.panelDispatch.Dispatch(ctx, p, req)
+	if panelSpan != nil {
+		panelSpan.End()
+	}
 
 	// Record panel metrics
 	if e.metrics != nil {
@@ -122,7 +147,27 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 
 	// Step 2: Judge synthesis
 	judgeCfg := p.Judge
+	var judgeSpan tracing.Span
+	if e.tracer != nil && e.tracer.Enabled() {
+		ctx, judgeSpan = e.tracer.StartSpan(ctx, "judge.synthesize",
+			tracing.AttrJudgeModel.String(judgeCfg.Model),
+		)
+	}
 	result, err := e.judgeSynth.Synthesize(ctx, judgeCfg, prompt, panelResponses)
+	if judgeSpan != nil {
+		if err != nil {
+			judgeSpan.RecordError(err)
+			judgeSpan.SetAttributes(tracing.AttrSuccess.Bool(false))
+		} else {
+			judgeSpan.SetAttributes(
+				tracing.AttrDuration.Int64(time.Since(start).Milliseconds()),
+				tracing.AttrTokenCount.Int(result.Usage.TotalTokens),
+				tracing.AttrCostUSD.Float64(result.Usage.CostUSD),
+				tracing.AttrSuccess.Bool(true),
+			)
+		}
+		judgeSpan.End()
+	}
 	if err != nil {
 		if e.metrics != nil {
 			e.metrics.RecordFusionComplete(presetName, time.Since(start), false)

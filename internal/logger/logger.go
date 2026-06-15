@@ -19,8 +19,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"runtime"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -169,20 +167,6 @@ var LogLevel = "info"
 // defaultLogger is the package-level logger used by package-level functions.
 var defaultLogger = New(os.Stderr)
 
-// InitFromEnv reads OPENFUSION_LOG_LEVEL and configures the default logger.
-func InitFromEnv() {
-	switch strings.ToLower(os.Getenv("OPENFUSION_LOG_LEVEL")) {
-	case "debug":
-		defaultLogger.SetLevel(LevelDebug)
-	case "warn", "warning":
-		defaultLogger.SetLevel(LevelWarn)
-	case "error":
-		defaultLogger.SetLevel(LevelError)
-	default:
-		defaultLogger.SetLevel(LevelInfo)
-	}
-}
-
 // Debug logs to the default logger.
 func Debug(msg string, kv ...string) { defaultLogger.Debug(msg, kv...) }
 
@@ -204,21 +188,3 @@ func StopUsingStdlibLog() {
 	log.SetOutput(io.Discard)
 }
 
-// ---------------------------------------------------------------------------
-// Caller-skip helpers
-// ---------------------------------------------------------------------------
-
-// caller returns the file:line of the caller n frames up.
-func caller(skip int) string {
-	_, file, line, ok := runtime.Caller(skip)
-	if !ok {
-		return "?:?"
-	}
-	// Shorten path: /home/user/go/src/github.com/.../file.go → pkg/file.go
-	if idx := strings.LastIndex(file, "/internal/"); idx >= 0 {
-		file = file[idx+1:]
-	} else if idx := strings.LastIndex(file, "/cmd/"); idx >= 0 {
-		file = file[idx+1:]
-	}
-	return fmt.Sprintf("%s:%d", file, line)
-}

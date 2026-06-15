@@ -3,6 +3,7 @@ package concurrency
 
 import (
 	"math"
+	"runtime"
 	"sync"
 	"sync/atomic"
 )
@@ -51,6 +52,7 @@ func (l *AdaptiveLimiter) TryAcquire() bool {
 		if l.inFlight.CompareAndSwap(in, in+1) {
 			return true
 		}
+		runtime.Gosched()
 	}
 }
 

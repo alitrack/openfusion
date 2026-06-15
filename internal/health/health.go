@@ -89,14 +89,6 @@ func (c *Checker) IsHealthy(name string) bool {
 	return ps.Healthy.Load()
 }
 
-// SetPingFn overrides the ping function for a provider at runtime.
-func (c *Checker) SetPingFn(name string, fn func(ctx context.Context, name string) error) {
-	if cfg, ok := c.configs[name]; ok {
-		cfg.PingFn = fn
-		c.configs[name] = cfg
-	}
-}
-
 // check performs a single health check and updates status.
 func (c *Checker) check(name string, cfg Config, status *ProviderStatus) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)

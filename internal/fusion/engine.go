@@ -140,12 +140,14 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	ctx := context.Background()
 
 	// Start root tracing span
+	var rootSpan tracing.Span
 	if e.tracer != nil && e.tracer.Enabled() {
-		ctx, _ = e.tracer.StartSpan(ctx, "Fusion.Execute",
+		ctx, rootSpan = e.tracer.StartSpan(ctx, "Fusion.Execute",
 			tracing.AttrPreset.String(presetName),
 			tracing.AttrPanelCount.Int(len(p.Panel)),
 			tracing.AttrJudgeModel.String(p.Judge.Model),
 		)
+		defer rootSpan.End()
 	}
 
 	if e.metrics != nil {

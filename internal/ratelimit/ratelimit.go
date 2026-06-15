@@ -2,7 +2,6 @@
 package ratelimit
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -70,10 +69,17 @@ func (l *Limiter) Allow(presetName string) (bool, time.Duration) {
 	if !ok {
 		// Unknown preset — create on the fly with default limits
 		l.mu.Lock()
+		// Double-check: another goroutine may have created it while we were unlocked
+		if lim, ok = l.limiters[presetName]; ok {
+			l.mu.Unlock()
+			goto check
+		}
 		lim = rate.NewLimiter(rate.Limit(l.defaultC.Rate), l.defaultC.Burst)
 		l.limiters[presetName] = lim
 		l.mu.Unlock()
 	}
+
+check:
 
 	// Reserve a token
 	r := lim.Reserve()
@@ -92,9 +98,4 @@ func (l *Limiter) Allow(presetName string) (bool, time.Duration) {
 // Enabled returns whether rate limiting is active.
 func (l *Limiter) Enabled() bool {
 	return l.enabled
-}
-
-// IsRateLimitedError creates a standard 429 error message.
-func IsRateLimitedError(presetName string, retryAfter time.Duration) error {
-	return fmt.Errorf("rate limit exceeded for preset '%s', retry after %.1fs", presetName, retryAfter.Seconds())
 }

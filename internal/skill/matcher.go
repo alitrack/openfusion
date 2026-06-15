@@ -66,13 +66,3 @@ func containsAny(slice []string, items []string) bool {
 	return false
 }
 
-// clamp restricts a value to [lo, hi].
-func clamp(val, lo, hi int) int {
-	if val < lo {
-		return lo
-	}
-	if val > hi {
-		return hi
-	}
-	return val
-}

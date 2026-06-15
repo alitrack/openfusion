@@ -186,13 +186,3 @@ type FusionResult struct {
 	Answer   string           `json:"answer"`
 	Usage    Usage            `json:"usage"`
 }
-
-// ---------------------------------------------------------------------------
-// Error types
-// ---------------------------------------------------------------------------
-
-// APIError represents a structured API error response.
-type APIError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}

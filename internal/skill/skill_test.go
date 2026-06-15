@@ -415,3 +415,38 @@ func TestSkill_Matches(t *testing.T) {
 func boolPtr(b bool) *bool {
 	return &b
 }
+
+// ---------------------------------------------------------------------------
+// Registry test helpers
+// ---------------------------------------------------------------------------
+
+// newTestRegistry creates a registry with test skills.
+func newTestRegistry() *Registry {
+	r := NewRegistry()
+	r.Add(&Skill{
+		Name: "qa-simple",
+		Mode: ModeDirect,
+		Strategy: Strategy{
+			Provider: "local-ds",
+			Model:    "deepseek-v4-flash",
+		},
+		Priority: 100,
+	})
+	r.Add(&Skill{
+		Name: "code-gen",
+		Mode: ModeSelfEnsemble,
+		Strategy: Strategy{
+			Provider: "local-ds",
+			Model:    "deepseek-v4-flash",
+			Panel: []PanelMemberConfig{
+				{Provider: "local-ds", Model: "deepseek-v4-flash"},
+				{Provider: "local-ds", Model: "deepseek-v4-flash"},
+			},
+		},
+		Priority: 80,
+		Triggers: []Trigger{
+			{Categories: "code", MinTokens: 10},
+		},
+	})
+	return r
+}

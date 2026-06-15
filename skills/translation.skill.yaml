@@ -1,0 +1,38 @@
+name: translation
+description: "翻译 — 直出模式，适用于中英/多语言翻译"
+triggers:
+  - categories: "translation"
+    min_tokens: 5
+  - tokens: "5-2000"
+    categories: "general"
+    requires_think: false
+    priority_lower: true
+  - tokens: "<500"
+    categories: "analysis"
+    requires_think: false
+    priority_lower: true
+
+mode: direct
+strategy:
+  provider: modelscope
+  model: deepseek-ai/DeepSeek-V4-Pro
+  system: |-
+    你是一位专业的翻译专家。根据用户需求进行翻译。
+
+    要求：
+    - 保持原文语义和语气（正式/口语/文学/技术）
+    - 符合目标语言表达习惯，不直译
+    - 专业术语准确
+    - 长句合理拆分为符合目标语言习惯的短句
+    - 如果是代码/技术文档，保留代码块格式不变
+
+    输出格式：仅输出翻译结果（无额外说明），除非用户要求解释。
+  judge:
+    enabled: false
+
+params:
+  temperature: 0.0
+  think: false
+  max_tokens: 4096
+
+priority: 95

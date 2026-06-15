@@ -119,8 +119,9 @@ func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error
 		e.metrics.RecordRequest(matched.Name)
 	}
 
-	// Execute skill
-	ctx := context.Background()
+	// Execute skill with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), e.defaultTimeout)
+	defer cancel()
 	resp, err := e.skillExecutor.Execute(ctx, matched, req)
 	if err != nil {
 		return nil, fmt.Errorf("skill '%s' execution: %w", matched.Name, err)
@@ -164,6 +165,14 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		return nil, fmt.Errorf("no user message found in request")
 	}
 
+	// Step 0: Cache check before any API calls
+	cacheKey := cache.Key(presetName, req.Messages)
+	if e.cache != nil && e.cache.Enabled() {
+		if cached := e.cache.Get(cacheKey); cached != nil {
+			return cached, nil
+		}
+	}
+
 	// Step 1: Dispatch panel in parallel
 	var panelSpan tracing.Span
 	if e.tracer != nil && e.tracer.Enabled() {
@@ -185,15 +194,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		}
 	}
 
-	// Step 1a: Cache check — generate key and check before judge
-	cacheKey := cache.Key(presetName, req.Messages)
-	if e.cache != nil && e.cache.Enabled() {
-		if cached := e.cache.Get(cacheKey); cached != nil {
-			return cached, nil
-		}
-	}
-
-	// Step 1b: If judge=false, return panel responses directly
+	// Step 1a: If judge=false, return panel responses directly
 	if req.Judge != nil && !*req.Judge {
 		return buildPanelOnlyResponse(presetName, panelResponses), nil
 	}

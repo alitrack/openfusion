@@ -70,17 +70,13 @@ func (s *Synthesizer) Synthesize(ctx context.Context, judgeCfg types.JudgeConfig
 	// Attempt to extract structured analysis from the answer
 	result.Analysis = extractAnalysis(answer)
 
-	// Accumulate panel usage
+	// Accumulate panel usage (result.Usage already contains judge usage from line 67)
 	for _, pr := range panelResponses {
 		result.Usage.PromptTokens += pr.Usage.PromptTokens
 		result.Usage.CompletionTokens += pr.Usage.CompletionTokens
 		result.Usage.TotalTokens += pr.Usage.TotalTokens
 		result.Usage.CostUSD += pr.Usage.CostUSD
 	}
-	result.Usage.TotalTokens += resp.Usage.TotalTokens
-	result.Usage.CostUSD += resp.Usage.CostUSD
-	result.Usage.CompletionTokens += resp.Usage.CompletionTokens
-	result.Usage.PromptTokens += resp.Usage.PromptTokens
 
 	return result, nil
 }

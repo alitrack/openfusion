@@ -148,8 +148,10 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	var req types.ChatRequest
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10 MB limit
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		s.log.Warn("invalid request body", "error", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -181,8 +183,8 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if model == "" || model == "auto" || model == "openfusion/auto" {
 		resp, err := s.engine.ExecuteAuto(&req)
 		if err != nil {
-			s.log.Warn("auto-route failed", "error", err.Error())
-			writeError(w, http.StatusInternalServerError, "auto-route failed: "+err.Error())
+		s.log.Warn("auto-route failed", "error", err.Error())
+		writeError(w, http.StatusInternalServerError, "auto-route failed")
 			return
 		}
 		writeJSON(w, http.StatusOK, resp)
@@ -198,7 +200,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.engine.Execute(req.Model, &req)
 	if err != nil {
 		s.log.Warn("fusion execution failed", "preset", model, "error", err.Error())
-		writeError(w, http.StatusInternalServerError, "fusion execution failed: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "fusion execution failed")
 		return
 	}
 
@@ -220,7 +222,8 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 	// Run fusion synchronously (panel + judge must complete first)
 	resp, err := s.engine.Execute(req.Model, req)
 	if err != nil {
-		fmt.Fprintf(w, "data: {\"error\":\"%s\"}\n\n", err.Error())
+		s.log.Warn("streaming fusion failed", "error", err.Error())
+		fmt.Fprintf(w, "data: {\"error\":\"internal error\"}\n\n")
 		flusher.Flush()
 		return
 	}

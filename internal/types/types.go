@@ -25,6 +25,7 @@ type ChatRequest struct {
 	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
 	Think          *bool             `json:"think,omitempty"`
 	ThinkBudget    int               `json:"think_budget,omitempty"`
+	Codex          bool              `json:"codex,omitempty"`
 }
 
 // ResponseFormat controls structured output.
@@ -73,6 +74,30 @@ type ChatResponse struct {
 	Usage   Usage         `json:"usage,omitempty"`
 	Analysis *FusionAnalysis `json:"analysis,omitempty"`
 	PanelResponses []PanelResponseSummary `json:"panel_responses,omitempty"`
+	Codex   *CodexResponse `json:"codex,omitempty"`
+}
+
+// CodexFile represents a single generated file.
+type CodexFile struct {
+	Path     string `json:"path"`
+	Content  string `json:"content"`
+	Language string `json:"language"`
+}
+
+// CodexResponse is the structured output for codex: true requests.
+type CodexResponse struct {
+	Language   string      `json:"language"`
+	Files      []CodexFile `json:"files"`
+	Explanation string     `json:"explanation"`
+	Tests      string      `json:"tests,omitempty"`
+	Analysis   *CodexAnalysis `json:"analysis,omitempty"`
+}
+
+// CodexAnalysis shows what the judge found.
+type CodexAnalysis struct {
+	PanelCount     int      `json:"panel_count"`
+	Consensus      []string `json:"consensus,omitempty"`
+	ChosenApproach string   `json:"chosen_approach,omitempty"`
 }
 
 // Choice represents a single completion choice.

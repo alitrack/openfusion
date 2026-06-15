@@ -1,0 +1,50 @@
+name: code-gen
+description: "Codex 兼容模式 — 自融合代码生成，返回结构化 JSON"
+triggers:
+  # 自然语言代码请求（如"用 Python 写一个..."）
+  - categories: "code"
+    min_tokens: 10
+  # 自然语言代码请求含 Python/Java/Go 等语言名
+  - tokens: "10-2000"
+    categories: "analysis"
+    requires_think: true
+  # 长文本代码生成请求
+  - min_tokens: 200
+    requires_think: true
+
+mode: self-ensemble
+strategy:
+  provider: local-ds
+  model: deepseek-v4-flash
+  panel:
+    - system: |-
+        你是一位严谨的软件工程师。根据需求生成完整的可运行代码。
+        要求：
+        - 生产级质量，含错误处理
+        - 清晰的注释
+        - 考虑边界情况
+        输出格式：代码块（标注语言）+ 简短说明。
+      think: true
+      temperature: 0.2
+    - system: |-
+        你是一位创意型程序员。从另一个角度实现相同的功能。
+        关注：
+        - 不同的设计选择
+        - 备选方案
+        - 性能 vs 可读性权衡
+        输出格式：代码块 + 为什么这样实现。
+      think: true
+      temperature: 0.5
+  judge:
+    enabled: true
+    system: |-
+        你是一位资深代码审阅 Lead。阅读两份代码实现。
+        1) 指出完全相同/不同的部分
+        2) 选择更优的那份，或综合两者优点
+        3) 输出最终版本，包含：代码块、实现说明、使用示例
+        4) 如果有安全/性能问题，明确指出
+
+params:
+  max_tokens: 8192
+
+priority: 80

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lhy/openfusion/internal/codex"
 	"github.com/lhy/openfusion/internal/judge"
 	"github.com/lhy/openfusion/internal/panel"
 	"github.com/lhy/openfusion/internal/provider"
@@ -42,6 +43,9 @@ func (e *Executor) Execute(ctx context.Context, s *Skill, req *types.ChatRequest
 	ctx, cancel := context.WithTimeout(ctx, e.defaultTimeout)
 	defer cancel()
 
+	// Fill in missing panel member provider/model from strategy defaults
+	s = inheritPanelDefaults(s)
+
 	switch s.Mode {
 	case ModeDirect:
 		return e.executeDirect(ctx, s, req)
@@ -52,6 +56,29 @@ func (e *Executor) Execute(ctx context.Context, s *Skill, req *types.ChatRequest
 	default:
 		return nil, fmt.Errorf("unknown skill mode: %s", s.Mode)
 	}
+}
+
+// inheritPanelDefaults fills empty provider/model in panel members from strategy level.
+func inheritPanelDefaults(s *Skill) *Skill {
+	cp := *s
+	cp.Strategy.Panel = make([]PanelMemberConfig, len(s.Strategy.Panel))
+	for i, pm := range s.Strategy.Panel {
+		cp.Strategy.Panel[i] = pm
+		if cp.Strategy.Panel[i].Provider == "" {
+			cp.Strategy.Panel[i].Provider = s.Strategy.Provider
+		}
+		if cp.Strategy.Panel[i].Model == "" {
+			cp.Strategy.Panel[i].Model = s.Strategy.Model
+		}
+	}
+	// Also default judge provider/model from strategy
+	if cp.Strategy.Judge.Provider == "" {
+		cp.Strategy.Judge.Provider = cp.Strategy.Provider
+	}
+	if cp.Strategy.Judge.Model == "" {
+		cp.Strategy.Judge.Model = cp.Strategy.Model
+	}
+	return &cp
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +115,8 @@ func (e *Executor) executeSelfEnsemble(ctx context.Context, s *Skill, req *types
 	}
 
 	for _, pm := range s.Strategy.Panel {
-		preset.Panel = append(preset.Panel, pm.PanelMember)
+		base := pm.ToBase()
+		preset.Panel = append(preset.Panel, base)
 	}
 
 	// Dispatch panel
@@ -112,14 +140,22 @@ func (e *Executor) executeSelfEnsemble(ctx context.Context, s *Skill, req *types
 		return nil, fmt.Errorf("self-ensemble judge: %w", err)
 	}
 
-	return &types.ChatResponse{
+	resp := &types.ChatResponse{
 		ID:      fmt.Sprintf("ofusion_skill_%d", time.Now().UnixNano()),
 		Object:  "chat.completion",
 		Model:   "openfusion/" + s.Name,
 		Choices: []types.Choice{{Index: 0, Message: types.ChatMessage{Role: "assistant", Content: result.Answer}}},
 		Usage:   result.Usage,
 		Analysis: result.Analysis,
-	}, nil
+	}
+
+	// If codex mode is requested, extract structured code output
+	if req.Codex {
+		cx := codex.Extract(result.Answer, len(panelResponses))
+		resp.Codex = cx
+	}
+
+	return resp, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -167,11 +203,7 @@ func buildPanelRequest(s *Skill, req *types.ChatRequest, provider, model, system
 
 // toJudgeConfig converts skill.JudgeConfig to types.JudgeConfig.
 func toJudgeConfig(jc JudgeConfig) types.JudgeConfig {
-	return types.JudgeConfig{
-		Provider:     jc.Provider,
-		Model:        jc.Model,
-		SystemPrompt: jc.SystemPrompt,
-	}
+	return jc.ToBase()
 }
 
 // buildPanelOnlyResponse constructs a response with raw panel outputs (no judge).

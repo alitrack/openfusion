@@ -164,7 +164,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-route via skill matching when model is auto/empty
 	model := req.Model
-	if model == "" || model == "openfusion/auto" {
+	if model == "" || model == "auto" || model == "openfusion/auto" {
 		resp, err := s.engine.ExecuteAuto(&req)
 		if err != nil {
 			log.Printf("Auto-route error: %v", err)

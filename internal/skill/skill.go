@@ -139,19 +139,41 @@ func matchCategories(pattern string, categories []string) bool {
 // PanelMemberConfig
 // ---------------------------------------------------------------------------
 
-// PanelMemberConfig extends types.PanelMember with skill-specific params.
+// PanelMemberConfig extends the base panel member with skill-specific params.
 type PanelMemberConfig struct {
-	types.PanelMember `yaml:",inline" json:",inline"`
-	Think             *bool    `yaml:"think,omitempty" json:"think,omitempty"`
-	Temperature       *float64 `yaml:"temperature,omitempty" json:"temperature,omitempty"`
+	Provider     string   `yaml:"provider" json:"provider"`
+	Model        string   `yaml:"model" json:"model"`
+	System       string   `yaml:"system,omitempty" json:"system,omitempty"`
+	Think        *bool    `yaml:"think,omitempty" json:"think,omitempty"`
+	Temperature  *float64 `yaml:"temperature,omitempty" json:"temperature,omitempty"`
 }
 
-// JudgeConfig extends types.JudgeConfig with skill-specific params.
+// ToBase returns a base types.PanelMember.
+func (pmc PanelMemberConfig) ToBase() types.PanelMember {
+	return types.PanelMember{
+		Provider: pmc.Provider,
+		Model:    pmc.Model,
+		System:   pmc.System,
+	}
+}
+
+// JudgeConfig extends the base judge config with skill-specific params.
 type JudgeConfig struct {
-	types.JudgeConfig `yaml:",inline" json:",inline"`
-	Think             *bool    `yaml:"think,omitempty" json:"think,omitempty"`
-	Temperature       *float64 `yaml:"temperature,omitempty" json:"temperature,omitempty"`
-	Enabled           bool     `yaml:"enabled" json:"enabled"` // false = skip judge (only for self-ensemble/fusion)
+	Provider     string   `yaml:"provider,omitempty" json:"provider,omitempty"`
+	Model        string   `yaml:"model,omitempty" json:"model,omitempty"`
+	SystemPrompt string   `yaml:"system,omitempty" json:"system,omitempty"`
+	Think        *bool    `yaml:"think,omitempty" json:"think,omitempty"`
+	Temperature  *float64 `yaml:"temperature,omitempty" json:"temperature,omitempty"`
+	Enabled      bool     `yaml:"enabled" json:"enabled"`
+}
+
+// ToBase returns a base types.JudgeConfig.
+func (jc JudgeConfig) ToBase() types.JudgeConfig {
+	return types.JudgeConfig{
+		Provider:     jc.Provider,
+		Model:        jc.Model,
+		SystemPrompt: jc.SystemPrompt,
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +325,11 @@ func FromPreset(p *types.Preset) *Skill {
 
 	panel := make([]PanelMemberConfig, len(p.Panel))
 	for i, pm := range p.Panel {
-		panel[i] = PanelMemberConfig{PanelMember: pm}
+		panel[i] = PanelMemberConfig{
+			Provider: pm.Provider,
+			Model:    pm.Model,
+			System:   pm.System,
+		}
 	}
 
 	return &Skill{
@@ -325,10 +351,12 @@ func FromPreset(p *types.Preset) *Skill {
 				return ""
 			}(),
 			Panel: panel,
-			Judge: JudgeConfig{
-				JudgeConfig: p.Judge,
-				Enabled:     true,
-			},
+		Judge: JudgeConfig{
+			Provider: p.Judge.Provider,
+			Model:    p.Judge.Model,
+			SystemPrompt: p.Judge.SystemPrompt,
+			Enabled:     true,
+		},
 		},
 		Params:   SkillParams{},
 		Priority: 0, // presets get lowest priority

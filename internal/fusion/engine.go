@@ -9,6 +9,7 @@ import (
 
 	"github.com/lhy/openfusion/internal/api"
 	"github.com/lhy/openfusion/internal/cache"
+	"github.com/lhy/openfusion/internal/codex"
 	"github.com/lhy/openfusion/internal/judge"
 	"github.com/lhy/openfusion/internal/metrics"
 	"github.com/lhy/openfusion/internal/panel"
@@ -242,6 +243,13 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		},
 		Usage:    result.Usage,
 		Analysis: result.Analysis,
+	}
+
+	// Attach structured codex output if requested
+	if req.Codex {
+		panelCount := len(panelResponses)
+		cx := codex.Extract(result.Answer, panelCount)
+		resp.Codex = cx
 	}
 
 	// Step 3b: Cache the result

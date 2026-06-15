@@ -25,6 +25,19 @@ func TestAnalyzeRequest_CodeDetection(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRequest_CodeDetectionChinese(t *testing.T) {
+	req := &types.ChatRequest{
+		Messages: []types.ChatMessage{
+			{Role: "user", Content: "用 Python 写一个 LRU Cache，线程安全"},
+		},
+	}
+	f := AnalyzeRequest(req)
+
+	if !containsAny(f.Categories, []string{"code"}) {
+		t.Errorf("expected category 'code' for Chinese code request, got %v", f.Categories)
+	}
+}
+
 func TestAnalyzeRequest_Greeting(t *testing.T) {
 	req := &types.ChatRequest{
 		Messages: []types.ChatMessage{
@@ -329,7 +342,7 @@ func TestSkill_Validate(t *testing.T) {
 				Mode: ModeSelfEnsemble,
 				Strategy: Strategy{
 					Panel: []PanelMemberConfig{
-						{PanelMember: types.PanelMember{Provider: "a", Model: "m1"}},
+						{Provider: "a", Model: "m1"},
 					},
 				},
 			},
@@ -342,8 +355,8 @@ func TestSkill_Validate(t *testing.T) {
 				Mode: ModeSelfEnsemble,
 				Strategy: Strategy{
 					Panel: []PanelMemberConfig{
-						{PanelMember: types.PanelMember{Provider: "a", Model: "m1"}},
-						{PanelMember: types.PanelMember{Provider: "a", Model: "m1"}},
+						{Provider: "a", Model: "m1"},
+						{Provider: "a", Model: "m1"},
 					},
 				},
 			},

@@ -1,13 +1,13 @@
 name: self-ensemble
-description: "自融合 — 同一模型跑 2 次 + 自身 Judge。已验证 +6.7 分提升（Opus 4.8: 58.8→65.5），验证合成步骤本身的增益。"
+description: "自融合 — DeepSeek V4 Pro 同一模型跑 2 次 + GLM 5.1 Judge"
 panel:
-  - provider: openrouter
-    model: deepseek/deepseek-v4-pro
-    system: "你是专业研究助手，给出全面、准确的回答。"
-  - provider: openrouter
-    model: deepseek/deepseek-v4-pro
-    system: "你是专业研究助手，给出全面、准确的回答。从不同的角度分析问题。"
+  - provider: modelscope
+    model: deepseek-ai/DeepSeek-V4-Pro
+    system: "你是专业研究助手，给出全面准确的回答。"
+  - provider: modelscope
+    model: deepseek-ai/DeepSeek-V4-Pro
+    system: "你是专业研究助手，从不同角度分析问题。"
 judge:
-  provider: openrouter
-  model: deepseek/deepseek-v4-pro
-  system: "你是一位专业的 AI 回答综合分析专家。对比两个回答，提取共识和差异，写出综合后的最佳答案。"
+  provider: modelscope
+  model: ZhipuAI/GLM-5.1
+  system: "你是一位专业的 AI 回答分析专家。对比两个回答，提取共识和差异，写出综合后的最佳答案。"

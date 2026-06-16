@@ -45,7 +45,7 @@ func (m *mockEngine) ListPresets() []PresetSummary {
 	return m.presets
 }
 
-func (m *mockEngine) Metrics() interface{} {
+func (m *mockEngine) Metrics() any {
 	return nil
 }
 
@@ -112,11 +112,11 @@ func TestListModels(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	data, ok := body["data"].([]interface{})
+	data, ok := body["data"].([]any)
 	if !ok {
 		t.Fatalf("body[\"data\"] is not an array")
 	}

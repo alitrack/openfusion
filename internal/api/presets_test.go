@@ -21,7 +21,7 @@ func TestPresetsCRUD(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200", rec.Code)
 		}
-		var body map[string]interface{}
+		var body map[string]any
 		json.NewDecoder(rec.Body).Decode(&body)
 		if body["total"].(float64) != 0 {
 			t.Errorf("total = %v, want 0", body["total"])
@@ -55,7 +55,7 @@ func TestPresetsCRUD(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/v1/presets", nil)
 		srv.Handler().ServeHTTP(rec, req)
-		var body map[string]interface{}
+		var body map[string]any
 		json.NewDecoder(rec.Body).Decode(&body)
 		if body["total"].(float64) != 1 {
 			t.Errorf("total = %v, want 1", body["total"])

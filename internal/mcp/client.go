@@ -67,10 +67,10 @@ func NewClient(source KnowledgeSource) (*Client, error) {
 
 // initialize performs the MCP initialization handshake.
 func (c *Client) initialize() error {
-	initParams := map[string]interface{}{
+	initParams := map[string]any{
 		"protocolVersion": "2024-11-05",
-		"capabilities": map[string]interface{}{},
-		"clientInfo": map[string]interface{}{
+		"capabilities": map[string]any{},
+		"clientInfo": map[string]any{
 			"name":    "openfusion",
 			"version": "0.1.0",
 		},
@@ -114,7 +114,7 @@ func (c *Client) Search(ctx context.Context, query string) (string, error) {
 	}
 
 	// Build tool call arguments
-	args := map[string]interface{}{
+	args := map[string]any{
 		"query": query,
 	}
 	if c.source.MaxTokens > 0 {
@@ -125,7 +125,7 @@ func (c *Client) Search(ctx context.Context, query string) (string, error) {
 	resp, err := c.trans.Send(jsonRpcRequest{
 		Method: "tools/call",
 		Params: func() json.RawMessage {
-			p := map[string]interface{}{
+			p := map[string]any{
 				"name":      c.source.ToolName,
 				"arguments": args,
 			}

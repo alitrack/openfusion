@@ -62,7 +62,8 @@ func TestExtractLastUserMessage(t *testing.T) {
 }
 
 func TestListPresets(t *testing.T) {
-	e := &Engine{presetRegistry: preset.NewRegistry()}
+	e := &Engine{}
+	e.presetRegistry.Store(preset.NewRegistry())
 	presets := e.ListPresets()
 	if len(presets) != 0 {
 		t.Errorf("empty registry: got %d presets, want 0", len(presets))

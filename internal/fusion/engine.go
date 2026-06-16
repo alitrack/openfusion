@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lhy/openfusion/internal/api"
@@ -25,17 +26,18 @@ import (
 
 // Engine implements api.FusionEngine.
 type Engine struct {
+	presetRegistry atomic.Pointer[preset.Registry]
+	panelDispatch  atomic.Pointer[panel.Dispatcher]
+	judgeSynth     atomic.Pointer[judge.Synthesizer]
+	skillMatcher   atomic.Pointer[skill.Matcher]
+	skillExecutor  atomic.Pointer[skill.Executor]
+	providerMgr    atomic.Pointer[provider.Manager]
+
 	mu             sync.RWMutex
-	presetRegistry *preset.Registry
-	panelDispatch  *panel.Dispatcher
-	judgeSynth     *judge.Synthesizer
 	defaultTimeout time.Duration
 	metrics        *metrics.Collector
 	cache          *cache.Cache
 	tracer         *tracing.Tracer
-	skillMatcher   *skill.Matcher
-	skillExecutor  *skill.Executor
-	providerMgr    *provider.Manager
 	configPath     string
 }
 
@@ -53,18 +55,19 @@ func NewEngine(
 	sm *skill.Matcher,
 	se *skill.Executor,
 ) *Engine {
-	return &Engine{
-		presetRegistry: pr,
-		panelDispatch:  panel.NewDispatcher(pm, panelTimeout, hc, 0, 0),
-		judgeSynth:     judge.NewSynthesizer(pm, judgeTimeout),
+	e := &Engine{
 		defaultTimeout: defaultTimeout,
 		metrics:        mc,
 		cache:          ca,
 		tracer:         tr,
-		skillMatcher:   sm,
-		skillExecutor:  se,
-		providerMgr:    pm,
 	}
+	e.presetRegistry.Store(pr)
+	e.panelDispatch.Store(panel.NewDispatcher(pm, panelTimeout, hc, 0, 0))
+	e.judgeSynth.Store(judge.NewSynthesizer(pm, judgeTimeout))
+	e.skillMatcher.Store(sm)
+	e.skillExecutor.Store(se)
+	e.providerMgr.Store(pm)
+	return e
 }
 
 // Reload re-reads the config file and hot-swaps engine internals.
@@ -79,26 +82,22 @@ func (e *Engine) Reload(cfgPath string) error {
 		return fmt.Errorf("rebuild engine: %w", err)
 	}
 
-	// Atomic swap
-	e.mu.Lock()
-	e.presetRegistry = newEngine.presetRegistry
-	e.panelDispatch = newEngine.panelDispatch
-	e.judgeSynth = newEngine.judgeSynth
+	// Atomic swap — no lock needed for atomic.Pointer fields
+	e.presetRegistry.Store(newEngine.presetRegistry.Load())
+	e.panelDispatch.Store(newEngine.panelDispatch.Load())
+	e.judgeSynth.Store(newEngine.judgeSynth.Load())
 	e.defaultTimeout = newEngine.defaultTimeout
 	e.cache = newEngine.cache
-	e.skillMatcher = newEngine.skillMatcher
-	e.skillExecutor = newEngine.skillExecutor
-	e.providerMgr = newEngine.providerMgr
-	e.mu.Unlock()
+	e.skillMatcher.Store(newEngine.skillMatcher.Load())
+	e.skillExecutor.Store(newEngine.skillExecutor.Load())
+	e.providerMgr.Store(newEngine.providerMgr.Load())
 
 	return nil
 }
 
 // getProviderManager returns the current provider manager.
 func (e *Engine) getProviderManager() *provider.Manager {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.providerMgr
+	return e.providerMgr.Load()
 }
 
 // SetConfigPath stores the config path for use by Reload.
@@ -108,7 +107,7 @@ func (e *Engine) SetConfigPath(path string) {
 
 // ListPresets returns all registered presets as API summaries.
 func (e *Engine) ListPresets() []api.PresetSummary {
-	presets := e.presetRegistry.List()
+	presets := e.presetRegistry.Load().List()
 	summaries := make([]api.PresetSummary, 0, len(presets))
 	for _, p := range presets {
 		summaries = append(summaries, api.PresetSummary{
@@ -123,7 +122,7 @@ func (e *Engine) ListPresets() []api.PresetSummary {
 }
 
 // Metrics returns the metrics collector snapshot.
-func (e *Engine) Metrics() interface{} {
+func (e *Engine) Metrics() any {
 	if e.metrics == nil {
 		return nil
 	}
@@ -136,21 +135,21 @@ func (e *Engine) CreatePreset(name string, preset types.Preset) error {
 	defer e.mu.Unlock()
 	p := preset
 	p.Name = name
-	return e.presetRegistry.Register(&p)
+	return e.presetRegistry.Load().Register(&p)
 }
 
 // DeletePreset removes a preset by name.
 func (e *Engine) DeletePreset(name string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.presetRegistry.Remove(name)
+	return e.presetRegistry.Load().Remove(name)
 }
 
 // GetPreset returns a preset by name.
 func (e *Engine) GetPreset(name string) (*types.Preset, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	p, ok := e.presetRegistry.Get(name)
+	p, ok := e.presetRegistry.Load().Get(name)
 	if !ok {
 		return nil, fmt.Errorf("preset not found: %s", name)
 	}
@@ -161,8 +160,8 @@ func (e *Engine) GetPreset(name string) (*types.Preset, error) {
 // Falls back to the default preset if no skill matches.
 func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error) {
 	// No skill system initialized — fall back to preset
-	if e.skillMatcher == nil || e.skillExecutor == nil {
-		presets := e.presetRegistry.List()
+	if e.skillMatcher.Load() == nil || e.skillExecutor.Load() == nil {
+		presets := e.presetRegistry.Load().List()
 		if len(presets) > 0 {
 			return e.Execute(presets[0].Name, req)
 		}
@@ -173,13 +172,13 @@ func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error
 	features := skill.AnalyzeRequest(req)
 
 	// Match skill
-	matched := e.skillMatcher.Match(features)
+	matched := e.skillMatcher.Load().Match(features)
 	if matched == nil {
 		// No skill matched — fall back to default fusion
-		fallback := e.skillMatcher.DefaultRef()
+		fallback := e.skillMatcher.Load().DefaultRef()
 		if fallback == "" || fallback == "direct" {
 			// Use first available preset as fallback
-			presets := e.presetRegistry.List()
+			presets := e.presetRegistry.Load().List()
 			if len(presets) > 0 {
 				return e.Execute(presets[0].Name, req)
 			}
@@ -195,7 +194,7 @@ func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error
 	// Execute skill with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), e.defaultTimeout)
 	defer cancel()
-	resp, err := e.skillExecutor.Execute(ctx, matched, req)
+	resp, err := e.skillExecutor.Load().Execute(ctx, matched, req)
 	if err != nil {
 		return nil, fmt.Errorf("skill '%s' execution: %w", matched.Name, err)
 	}
@@ -205,7 +204,7 @@ func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error
 
 // Execute runs the full fusion pipeline: panel → judge → response.
 func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.ChatResponse, error) {
-	p, ok := e.presetRegistry.Get(presetName)
+	p, ok := e.presetRegistry.Load().Get(presetName)
 	if !ok {
 		return nil, fmt.Errorf("unknown model: %s", presetName)
 	}
@@ -276,7 +275,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 			tracing.AttrPanelCount.Int(len(p.Panel)),
 		)
 	}
-	panelResponses := e.panelDispatch.Dispatch(ctx, p, req)
+	panelResponses := e.panelDispatch.Load().Dispatch(ctx, p, req)
 	if panelSpan != nil {
 		panelSpan.End()
 	}
@@ -302,7 +301,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 			tracing.AttrJudgeModel.String(judgeCfg.Model),
 		)
 	}
-	result, err := e.judgeSynth.Synthesize(ctx, judgeCfg, prompt, panelResponses)
+	result, err := e.judgeSynth.Load().Synthesize(ctx, judgeCfg, prompt, panelResponses)
 	if judgeSpan != nil {
 		if err != nil {
 			judgeSpan.RecordError(err)

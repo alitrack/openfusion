@@ -172,7 +172,7 @@ func (c *Collector) Snapshot() *Snapshot {
 		// Iterate models
 		c.mu.RLock()
 		modelNames := make([]string, 0)
-		pm.models.Range(func(key, _ interface{}) bool {
+		pm.models.Range(func(key, _ any) bool {
 			modelNames = append(modelNames, key.(string))
 			return true
 		})

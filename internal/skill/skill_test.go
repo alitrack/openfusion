@@ -110,7 +110,7 @@ func TestAnalyzeRequest_ToolDefs(t *testing.T) {
 		Messages: []types.ChatMessage{
 			{Role: "user", Content: "What's the weather in Tokyo?"},
 		},
-		Tools: []interface{}{map[string]interface{}{"type": "function"}},
+		Tools: []any{map[string]any{"type": "function"}},
 	}
 	f := AnalyzeRequest(req)
 

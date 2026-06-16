@@ -89,12 +89,12 @@ judge:
 			t.Fatalf("status = %d, want 200", resp.StatusCode)
 		}
 
-		var body map[string]interface{}
+		var body map[string]any
 		json.NewDecoder(resp.Body).Decode(&body)
-		data := body["data"].([]interface{})
+		data := body["data"].([]any)
 		found := false
 		for _, item := range data {
-			m := item.(map[string]interface{})
+			m := item.(map[string]any)
 			if m["id"] == "openfusion/test-combo" {
 				found = true
 				break

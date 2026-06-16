@@ -21,7 +21,7 @@ type ChatRequest struct {
 	Temperature    *float64          `json:"temperature,omitempty"`
 	Stream         bool              `json:"stream,omitempty"`
 	NoJudge        *bool             `json:"no_judge,omitempty"`
-	Tools          []interface{}     `json:"tools,omitempty"`
+	Tools          []any     `json:"tools,omitempty"`
 	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
 	Think          *bool             `json:"think,omitempty"`
 	ThinkBudget    int               `json:"think_budget,omitempty"`

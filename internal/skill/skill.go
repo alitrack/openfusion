@@ -14,6 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/lhy/openfusion/internal/mcp"
 	"github.com/lhy/openfusion/internal/types"
 )
 
@@ -201,6 +202,10 @@ type Strategy struct {
 
 	// WebSearch configures web search context injection.
 	WebSearch *types.WebSearchConfig `yaml:"web_search,omitempty" json:"web_search,omitempty"`
+
+	// MCPKnowledge configures MCP-based knowledge source retrieval.
+	// Knowledge is retrieved before panel dispatch and injected as context.
+	MCPKnowledge *mcp.KnowledgeConfig `yaml:"mcp_knowledge,omitempty" json:"mcp_knowledge,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

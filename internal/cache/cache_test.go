@@ -7,12 +7,16 @@ import (
 	"github.com/lhy/openfusion/internal/types"
 )
 
+func makeParams(msgs ...types.ChatMessage) CacheParams {
+	return CacheParams{Messages: msgs}
+}
+
 func TestDisabled(t *testing.T) {
 	c, err := New(Config{Enabled: false})
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := Key("budget", []types.ChatMessage{{Role: "user", Content: "hello"}})
+	key := Key("budget", makeParams(types.ChatMessage{Role: "user", Content: "hello"}))
 	if got := c.Get(key); got != nil {
 		t.Fatal("disabled cache should return nil")
 	}
@@ -28,7 +32,7 @@ func TestSetAndGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	key := Key("budget", []types.ChatMessage{{Role: "user", Content: "hello"}})
+	key := Key("budget", makeParams(types.ChatMessage{Role: "user", Content: "hello"}))
 	resp := &types.ChatResponse{ID: "test123", Model: "budget"}
 
 	c.Set(key, resp)
@@ -42,9 +46,9 @@ func TestSetAndGet(t *testing.T) {
 }
 
 func TestCacheKeyUnique(t *testing.T) {
-	k1 := Key("budget", []types.ChatMessage{{Role: "user", Content: "hello"}})
-	k2 := Key("budget", []types.ChatMessage{{Role: "user", Content: "world"}})
-	k3 := Key("frontier", []types.ChatMessage{{Role: "user", Content: "hello"}})
+	k1 := Key("budget", makeParams(types.ChatMessage{Role: "user", Content: "hello"}))
+	k2 := Key("budget", makeParams(types.ChatMessage{Role: "user", Content: "world"}))
+	k3 := Key("frontier", makeParams(types.ChatMessage{Role: "user", Content: "hello"}))
 
 	if k1 == k2 {
 		t.Fatal("different messages should produce different keys")
@@ -60,7 +64,7 @@ func TestTTLExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	key := Key("budget", []types.ChatMessage{{Role: "user", Content: "hello"}})
+	key := Key("budget", makeParams(types.ChatMessage{Role: "user", Content: "hello"}))
 	c.Set(key, &types.ChatResponse{ID: "test"})
 
 	if got := c.Get(key); got == nil {

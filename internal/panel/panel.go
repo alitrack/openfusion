@@ -165,10 +165,10 @@ func (d *Dispatcher) callMember(ctx context.Context, member types.PanelMember, r
 			}
 		}
 		return types.PanelResponse{
-			Member:   member,
-			Error:    err.Error(),
-			Duration: duration,
-		}
+				Member:   member,
+				Error:    fmt.Sprintf("provider %q call failed", member.Provider),
+				Duration: duration,
+			}
 	}
 
 	limiter.RecordResult(true)

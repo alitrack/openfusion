@@ -139,6 +139,7 @@ func loadFile(path string) (*types.Preset, error) {
 
 // normalizeName normalizes preset names: lowercase, strip "openfusion/" prefix.
 func normalizeName(name string) string {
+	name = strings.TrimSpace(name)
 	name = strings.ToLower(name)
 	name = strings.TrimPrefix(name, "openfusion/")
 	return name

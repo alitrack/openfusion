@@ -20,8 +20,8 @@ type Entry struct {
 
 // Cache provides TTL-based LRU response caching.
 type Cache struct {
-	lru   *lru.Cache[string, *Entry]
-	ttl   time.Duration
+	lru     *lru.Cache[string, *Entry]
+	ttl     time.Duration
 	enabled bool
 }
 
@@ -30,6 +30,20 @@ type Config struct {
 	Enabled bool
 	MaxSize int
 	TTL     time.Duration
+}
+
+// CacheParams contains all request parameters that affect the response.
+type CacheParams struct {
+	Preset      string
+	Messages    []types.ChatMessage
+	MaxTokens   int
+	Temperature *float64
+	Think       *bool
+	ThinkBudget int
+	Codex       bool
+	NoJudge     *bool
+	PanelOverride []types.PanelMember
+	JudgeOverride *types.JudgeConfig
 }
 
 // New creates a new response cache.
@@ -51,21 +65,35 @@ func New(cfg Config) (*Cache, error) {
 	}, nil
 }
 
-// Key generates a cache key from preset name, messages, and optional overrides.
-func Key(preset string, messages []types.ChatMessage, overrides ...interface{}) string {
+// Key generates a cache key from all request parameters that affect the response.
+func Key(preset string, params CacheParams) string {
 	v := struct {
-		Preset    string
-		Messages  []types.ChatMessage
-		Overrides []interface{}
-	}{Preset: preset, Messages: messages, Overrides: overrides}
-	data, _ := json.Marshal(v)
+		Preset      string
+		Messages    []types.ChatMessage
+		MaxTokens   int
+		Temperature *float64
+		Think       *bool
+		ThinkBudget int
+		Codex       bool
+		NoJudge     *bool
+		PanelOverride []types.PanelMember
+		JudgeOverride *types.JudgeConfig
+	}{Preset: preset, Messages: params.Messages, MaxTokens: params.MaxTokens,
+		Temperature: params.Temperature, Think: params.Think, ThinkBudget: params.ThinkBudget,
+		Codex: params.Codex, NoJudge: params.NoJudge,
+		PanelOverride: params.PanelOverride, JudgeOverride: params.JudgeOverride}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%s:%x", preset, hash[:16])
 }
 
 // Get retrieves a cached response. Returns nil on miss or expiry.
+// Returns a deep copy to prevent callers from mutating cached data.
 func (c *Cache) Get(key string) *types.ChatResponse {
-	if !c.enabled {
+	if !c.enabled || key == "" {
 		return nil
 	}
 
@@ -79,12 +107,21 @@ func (c *Cache) Get(key string) *types.ChatResponse {
 		return nil
 	}
 
-	return entry.Response
+	// Deep copy to prevent cache poisoning from caller mutations
+	data, err := json.Marshal(entry.Response)
+	if err != nil {
+		return nil
+	}
+	var cp types.ChatResponse
+	if err := json.Unmarshal(data, &cp); err != nil {
+		return nil
+	}
+	return &cp
 }
 
 // Set stores a response in the cache.
 func (c *Cache) Set(key string, resp *types.ChatResponse) {
-	if !c.enabled {
+	if !c.enabled || key == "" {
 		return
 	}
 

@@ -1,13 +1,13 @@
 name: budget
-description: "平价组合 — DeepSeek V4 Pro + Qwen 3.5 27B → GLM 5.1 Judge"
+description: "平价组合 — DS V4 Pro + DS V4 Flash → DS V4 Pro Judge"
 panel:
-  - provider: modelscope
-    model: deepseek-ai/DeepSeek-V4-Pro
+  - provider: cc-switch
+    model: deepseek-chat
     system: "你是技术分析专家，注重严谨逻辑、技术深度和精确表述。"
-  - provider: modelscope
-    model: Qwen/Qwen3.5-27B
+  - provider: cc-switch
+    model: deepseek-v4-flash
     system: "你是全面研究助手，注重多角度覆盖和结构化输出。"
 judge:
-  provider: modelscope
-  model: ZhipuAI/GLM-5.1
+  provider: cc-switch
+  model: deepseek-chat
   system: "你是一位优秀的 AI 研究员，擅长对比分析并综合多个回答写出最佳答案。"

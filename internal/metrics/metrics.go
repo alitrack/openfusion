@@ -35,7 +35,7 @@ type presetMetrics struct {
 	TotalDuration  atomic.Int64 // ms
 
 	// Per-model breakdown
-	models map[string]*modelMetrics
+	models sync.Map // map[string]*modelMetrics
 
 	// Duration samples for quantile calculation (capped ring)
 	durations    []float64
@@ -171,18 +171,20 @@ func (c *Collector) Snapshot() *Snapshot {
 
 		// Iterate models
 		c.mu.RLock()
-		modelNames := make([]string, 0, len(pm.models))
-		for mn := range pm.models {
-			modelNames = append(modelNames, mn)
-		}
+		modelNames := make([]string, 0)
+		pm.models.Range(func(key, _ interface{}) bool {
+			modelNames = append(modelNames, key.(string))
+			return true
+		})
 		c.mu.RUnlock()
 
 		for _, mn := range modelNames {
 			c.mu.RLock()
-			mm := pm.models[mn]
-			c.mu.RUnlock()
+			mmv, _ := pm.models.Load(mn)
+		mm := mmv.(*modelMetrics)
+		c.mu.RUnlock()
 
-			ms := ModelSnapshot{
+		ms := ModelSnapshot{
 				Calls:         mm.Calls.Load(),
 				Success:       mm.Success.Load(),
 				Failed:        mm.Failed.Load(),
@@ -252,7 +254,6 @@ func (c *Collector) getOrCreatePreset(name string) *presetMetrics {
 		return pm
 	}
 	pm := &presetMetrics{
-		models:       make(map[string]*modelMetrics),
 		durations:    make([]float64, 0, 1000),
 		durationsCap: 1000,
 	}
@@ -264,15 +265,13 @@ func (c *Collector) getOrCreatePreset(name string) *presetMetrics {
 }
 
 func (pm *presetMetrics) getOrCreateModel(name string) *modelMetrics {
-	if mm, ok := pm.models[name]; ok {
-		return mm
+	if mmv, ok := pm.models.Load(name); ok {
+		return mmv.(*modelMetrics)
 	}
-	// Lock-free: models is only modified under c.mu in getOrCreatePreset,
-	// and pm is always accessed through Collector methods holding c.mu.
 	mm := &modelMetrics{}
 	mm.TotalCostUSD.Store(float64(0))
-	pm.models[name] = mm
-	return mm
+	mmv, _ := pm.models.LoadOrStore(name, mm)
+	return mmv.(*modelMetrics)
 }
 
 func (c *Collector) computeQuantiles(pm *presetMetrics) (p50, p90, p99 float64) {

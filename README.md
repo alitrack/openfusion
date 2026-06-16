@@ -2,6 +2,12 @@
 
 **Open-source multi-model fusion orchestration engine.** OpenAI-compatible API that dispatches requests to multiple LLMs in parallel and synthesizes the best answer.
 
+> ⚠️ **Research / experimental code.** OpenFusion is a personal research project exploring multi-model fusion patterns. It works in production at the author's environment but comes with no guarantees. Use at your own risk.
+>
+> 📄 Licensed under MIT — see [LICENSE](LICENSE).
+>
+> 🌐 [github.com/alitrack/openfusion](https://github.com/alitrack/openfusion)
+
 Like OpenRouter Fusion, but self-hosted on your own infrastructure.
 
 ## Features
@@ -16,6 +22,7 @@ Like OpenRouter Fusion, but self-hosted on your own infrastructure.
 | **Request-level panel/judge override** — inline `panel` and `judge` fields in API request override preset | ✅ |
 | **Web Search injection** — Brave Search API (free tier 2K/mo) fetches context, injects into all panel models | ✅ |
 | **Skill system** — `.skill.yaml` files define routing strategy (direct / self-ensemble / fusion) with trigger matching | ✅ |
+| **MCP Knowledge integration** — MCP client module retrieves domain knowledge from external MCP servers (ChatSQL, OntoMind, knowledge bases) and injects context before panel dispatch | ✅ |
 | **Plugin system** — ModelPlugin interface for model-specific optimizations (e.g. DeepSeek think/temperature) | ✅ |
 | **Codex mode** — structured code output (language, files, explanation, tests) with `codex: true` | ✅ |
 | **Usage metrics & cost dashboard** — web dashboard at `/v1/dashboard`, per-request metrics | ✅ |
@@ -185,6 +192,72 @@ strategy:
 ```
 
 Set `model: "auto"` or `model: "openfusion/auto"` to use skill matching.
+
+## MCP Knowledge Integration
+
+OpenFusion can retrieve domain knowledge from external [MCP (Model Context Protocol)](https://modelcontextprotocol.io) servers before dispatching to panel models. This enables **knowledge-augmented fusion** — panel models receive relevant context from knowledge bases, databases, or ontologies before generating their answers.
+
+### Configuration
+
+Add `mcp_knowledge` sources to any `.skill.yaml` file:
+
+```yaml
+# skills/domain-advisor.skill.yaml
+strategy:
+  mcp_knowledge:
+    sources:
+      # Stdio mode: spawn a subprocess
+      - server_cmd: "python scripts/mcp-knowledge-server.py"
+        tool_name: "search_knowledge"
+        max_tokens: 4000
+
+      # HTTP mode: connect to a remote MCP server
+      - server_url: "http://localhost:8080/mcp"
+        tool_name: "Ask"
+        max_tokens: 8000
+  panel: ...
+  judge: ...
+```
+
+### Supported Transports
+
+| Transport | Config Field | Use Case |
+|:----------|:-------------|:---------|
+| **stdio** | `server_cmd` | Local subprocess (Python, Node.js, .NET tools) |
+| **HTTP/SSE** | `server_url` | Remote MCP server |
+
+### Example Knowledge Sources
+
+| Source | MCP Tool | Purpose |
+|:-------|:---------|:--------|
+| [ChatSQL](https://github.com/alitrack/ChatSQL) | `Ask` | Natural language → SQL queries against business databases |
+| [OntoMind](https://github.com/alitrack/ChatSQL) | `search_ontology` | Query ontology concepts, entities, and relationships |
+| Document knowledge base | `search_knowledge` | RAG retrieval from indexed documents |
+| [SwanFlow](https://github.com/alitrack/swanflow) | `RunWorkflow` | Execute and inspect data science workflows |
+
+### Architecture
+
+```
+User Question
+    │
+    ▼
+OpenFusion (Skill Matching)
+    │
+    ├── MCP Client ──→ ChatSQL (NL2SQL query database)
+    ├── MCP Client ──→ OntoMind (ontology concept lookup)
+    └── MCP Client ──→ Knowledge Base (document RAG)
+    │
+    ▼ (all context injected into system prompt)
+Panel Models (parallel)
+    │
+    ▼
+Judge Synthesis
+    │
+    ▼
+Final Answer
+```
+
+See `internal/mcp/` for the MCP client implementation.
 
 ## Tests
 

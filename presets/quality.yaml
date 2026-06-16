@@ -1,13 +1,9 @@
 name: quality
-description: "前沿组合 — DeepSeek V4 Pro + Qwen 3.5 122B → GLM 5.1 Judge"
+description: "基准 — DeepSeek V4 Pro 单模型（直出）"
 panel:
-  - provider: modelscope
-    model: deepseek-ai/DeepSeek-V4-Pro
-    system: "你是前沿 AI 研究助手，具有深度推理能力，严谨逻辑。"
-  - provider: modelscope
-    model: Qwen/Qwen3.5-122B-A10B
-    system: "你是前沿 AI 研究助手，覆盖广泛知识面，给出详实分析和结论。"
+  - provider: cc-switch
+    model: deepseek-chat
 judge:
-  provider: modelscope
-  model: ZhipuAI/GLM-5.1
-  system: "你是一位顶级的 AI 研究员，擅长从多个专家回答中提取最佳内容并综合成超越任何单个专家的答案。"
+  provider: cc-switch
+  model: deepseek-chat
+  system: "直接输出准确的回答。"

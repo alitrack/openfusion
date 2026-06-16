@@ -8,6 +8,7 @@ import (
 
 	"github.com/lhy/openfusion/internal/codex"
 	"github.com/lhy/openfusion/internal/judge"
+	"github.com/lhy/openfusion/internal/mcp"
 	"github.com/lhy/openfusion/internal/panel"
 	"github.com/lhy/openfusion/internal/provider"
 	"github.com/lhy/openfusion/internal/search"
@@ -127,6 +128,11 @@ func (e *Executor) executeSelfEnsemble(ctx context.Context, s *Skill, req *types
 
 	// Apply search context injection
 	req.Messages = search.AddSearchContext(req.Messages, preset.WebSearch)
+
+	// Apply MCP knowledge context injection
+	if s.Strategy.MCPKnowledge != nil {
+		req.Messages = mcp.SearchAndInject(req.Messages, s.Strategy.MCPKnowledge)
+	}
 
 	// Dispatch panel
 	panelResponses := e.panelDispatcher.Dispatch(ctx, preset, req)

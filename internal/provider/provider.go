@@ -144,9 +144,13 @@ func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, req *types.ChatReque
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		// Log full body server-side, return generic error to avoid leaking account/endpoint info
-		logger.Warn("provider returned non-200",
-			"provider", a.name, "status", fmt.Sprintf("%d", resp.StatusCode), "body", string(respBody))
+		// Truncate body to avoid leaking secrets/account info in logs
+		bodyStr := string(respBody)
+		if len(bodyStr) > 512 {
+			bodyStr = bodyStr[:512] + "...(truncated)"
+		}
+		logger.Debug("provider non-200 response body", "provider", a.name, "status", fmt.Sprintf("%d", resp.StatusCode), "body", bodyStr)
+		logger.Warn("provider returned non-200", "provider", a.name, "status", fmt.Sprintf("%d", resp.StatusCode))
 		return nil, fmt.Errorf("provider %q returned status %d", a.name, resp.StatusCode)
 	}
 

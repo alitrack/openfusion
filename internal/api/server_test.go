@@ -244,9 +244,9 @@ func TestCacheKeyWithOverrides(t *testing.T) {
 	msgs := []types.ChatMessage{{Role: "user", Content: "hello"}}
 
 	// Same messages, different overrides → different keys
-	key1 := cache.Key("test", msgs, nil, nil)
-	key2 := cache.Key("test", msgs, []types.PanelMember{{Provider: "a", Model: "b"}}, nil)
-	key3 := cache.Key("test", msgs, nil, &types.JudgeConfig{Provider: "c", Model: "d"})
+	key1 := cache.Key("test", cache.CacheParams{Messages: msgs})
+	key2 := cache.Key("test", cache.CacheParams{Messages: msgs, PanelOverride: []types.PanelMember{{Provider: "a", Model: "b"}}})
+	key3 := cache.Key("test", cache.CacheParams{Messages: msgs, JudgeOverride: &types.JudgeConfig{Provider: "c", Model: "d"}})
 
 	if key1 == key2 {
 		t.Error("cache key should differ with panel override")

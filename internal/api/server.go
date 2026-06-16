@@ -2,6 +2,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -98,7 +99,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		token := strings.TrimPrefix(auth, "Bearer ")
-		if token != s.authToken {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(s.authToken)) != 1 {
 			writeError(w, http.StatusUnauthorized, "invalid API key")
 			return
 		}
@@ -299,6 +300,9 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if req.MaxTokens < 0 {
 		req.MaxTokens = 0
 	}
+	if req.MaxTokens > 131072 {
+		req.MaxTokens = 131072
+	}
 	if req.Temperature != nil {
 		if *req.Temperature < 0 || *req.Temperature > 2 {
 			t := 1.0
@@ -361,7 +365,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.engine.Execute(req.Model, &req)
+	resp, err := s.engine.Execute(model, &req)
 	if err != nil {
 		s.log.Warn("fusion execution failed", "preset", model, "error", err.Error())
 		writeError(w, http.StatusInternalServerError, "fusion execution failed")
@@ -444,6 +448,8 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 	for _, ch := range answer {
 		select {
 		case <-r.Context().Done():
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
 			return
 		default:
 		}

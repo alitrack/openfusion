@@ -1,0 +1,42 @@
+name: domain-advisor
+description: "领域知识顾问 — 结合 MCP 知识库检索的多模型融合分析"
+triggers:
+  - categories: "analysis|research"
+    min_tokens: 50
+  - tokens: "200-10000"
+    categories: "analysis|research"
+
+mode: fusion
+strategy:
+  # MCP 知识库配置：panel dispatch 前自动检索并注入上下文
+  mcp_knowledge:
+    sources:
+      # stdio 模式：启动一个 Python MCP Server 子进程
+      - server_cmd: "python /path/to/domain-knowledge-server.py"
+        tool_name: "search_knowledge"
+        max_tokens: 4000
+
+  panel:
+    - provider: modelscope
+      model: deepseek-ai/DeepSeek-V4-Pro
+      system: |-
+        你是一位领域专家。以下是相关的领域知识上下文，请基于这些知识回答问题。
+      temperature: 0.1
+    - provider: modelscope
+      model: Qwen/Qwen3.5-122B-A10B
+      system: |-
+        你是一位综合研究专家。以下知识上下文来自领域知识库，请结合你的分析和这些知识给出全面回答。
+      temperature: 0.3
+
+  judge:
+    provider: modelscope
+    model: ZhipuAI/GLM-5.1
+    enabled: true
+    system: |-
+        三个 AI 模型在领域知识上下文的辅助下回答了同一个问题。
+        请：1) 提取共识点 2) 识别矛盾 3) 综合出最终回答。
+
+params:
+  max_tokens: 8192
+
+priority: 60

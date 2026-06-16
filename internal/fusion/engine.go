@@ -244,7 +244,18 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	}
 
 	// Step 0: Cache check before any API calls
-	cacheKey := cache.Key(presetName, req.Messages, req.PanelOverride, req.JudgeOverride)
+	cacheKey := cache.Key(presetName, cache.CacheParams{
+		Preset:      presetName,
+		Messages:    req.Messages,
+		MaxTokens:   req.MaxTokens,
+		Temperature: req.Temperature,
+		Think:       req.Think,
+		ThinkBudget: req.ThinkBudget,
+		Codex:       req.Codex,
+		NoJudge:     req.NoJudge,
+		PanelOverride: req.PanelOverride,
+		JudgeOverride: req.JudgeOverride,
+	})
 	if e.cache != nil && e.cache.Enabled() {
 		if cached := e.cache.Get(cacheKey); cached != nil {
 			return cached, nil

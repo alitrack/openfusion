@@ -192,6 +192,22 @@ Set `model: "auto"` or `model: "openfusion/auto"` to use skill matching.
 go test ./... -v -count=1
 ```
 
+## Benchmark
+
+Validated against 3 tasks × 7 modes with DS V4 Pro blind judge:
+
+| Mode | Avg Score | Cost/req |
+|---|---|---|
+| Opus 4.6 (single) | **89.7** | ~$0.60 |
+| **Budget (DS Pro + Flash)** | **86.0** | **~$0.05** |
+| Flash self-ensemble | 85.7 | ~$0.03 |
+| DS Pro self-ensemble | 83.3 | ~$0.08 |
+| DS Pro single | 81.3 | ~$0.04 |
+
+**Key finding**: Budget fusion (DS V4 Pro + Flash at ~$0.05) beats Opus 4.6 on code tasks (88 vs 85) at 1/12 the cost.
+
+Full report: `claw/wiki/articles/openfusion-benchmark-2026.md`
+
 ## License
 
 MIT

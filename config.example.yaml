@@ -70,3 +70,13 @@ fusion:
 #     frontier:
 #       rate: 2
 #       burst: 5
+
+# Fusion logging hook — async CSV with monthly rotation + zstd compression
+# logging:
+#   hook:
+#     enabled: true
+#     output_dir: "fusion_log"
+#     auto_split: monthly        # monthly or daily
+#     knowledge_base: false
+#     max_workers: 2
+#     buffer_size: 100

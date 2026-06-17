@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lhy/openfusion/internal/logger"
+	"github.com/lhy/openfusion/internal/logging"
 	"github.com/lhy/openfusion/internal/ratelimit"
 	"github.com/lhy/openfusion/internal/types"
 )
@@ -52,16 +53,18 @@ type Server struct {
 	mux         *http.ServeMux
 	rateLimiter *ratelimit.Limiter
 	log         *logger.Logger
+	hook        *logging.Hook
 }
 
 // NewServer creates a new API server.
-func NewServer(engine FusionEngine, authToken, addr string, rl *ratelimit.Limiter) *Server {
+func NewServer(engine FusionEngine, authToken, addr string, rl *ratelimit.Limiter, hook *logging.Hook) *Server {
 	s := &Server{
 		engine:      engine,
 		authToken:   authToken,
 		mux:         http.NewServeMux(),
 		rateLimiter: rl,
 		log:         logger.New(nil).NewModule("api"),
+		hook:        hook,
 	}
 	s.registerRoutes()
 	return s
@@ -372,6 +375,8 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logFusion(model, &req, resp)
+
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -498,3 +503,114 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
+
+// logFusion writes a fusion log entry asynchronously after a successful completion.
+func (s *Server) logFusion(model string, req *types.ChatRequest, resp *types.ChatResponse) {
+	if s.hook == nil {
+		return
+	}
+
+	preset := strings.TrimPrefix(model, "openfusion/")
+	if preset == model {
+		preset = model
+	}
+
+	now := time.Now().UTC()
+	query := types.ExtractLastUserMessage(req.Messages)
+	if len(query) > 1000 {
+		query = query[:1000]
+	}
+
+	entry := &logging.FusionLog{
+		FusionID:        resp.ID,
+		Timestamp:       now.Format(time.RFC3339),
+		Preset:          preset,
+		Query:           query,
+		JudgeModel:      "",
+		JudgeAnalysis:   "",
+		FinalAnswer:     "",
+		PromptTokens:    resp.Usage.PromptTokens,
+		CompletionTokens: resp.Usage.CompletionTokens,
+		TotalTokens:     resp.Usage.TotalTokens,
+		CostUSD:         resp.Usage.CostUSD,
+		PanelErrors:     0,
+	}
+
+	// Fill panel data from response
+	for i, pr := range resp.PanelResponses {
+		switch i {
+		case 0:
+			entry.ModelAName = pr.Model
+			entry.ModelAOutput = logging.SanitizeCSVField(pr.Content)
+			entry.ModelAStatus = statusStr(pr.Error)
+		case 1:
+			entry.ModelANameB = pr.Model
+			entry.ModelBOutput = logging.SanitizeCSVField(pr.Content)
+			entry.ModelBStatus = statusStr(pr.Error)
+		case 2:
+			entry.ModelCName = pr.Model
+			entry.ModelCOutput = logging.SanitizeCSVField(pr.Content)
+			entry.ModelCStatus = statusStr(pr.Error)
+		}
+		if pr.Error != "" {
+			entry.PanelErrors++
+		}
+	}
+
+	// Fill analysis from response
+	if resp.Analysis != nil {
+		entry.JudgeAnalysis = logging.SanitizeCSVField(formatAnalysis(resp.Analysis))
+	}
+
+	// Fill final answer
+	if len(resp.Choices) > 0 {
+		entry.FinalAnswer = logging.SanitizeCSVField(resp.Choices[0].Message.Content)
+	}
+
+	s.hook.Log(entry)
+}
+
+func statusStr(err string) string {
+	if err == "" {
+		return "success"
+	}
+	return "error"
+}
+
+func formatAnalysis(a *types.FusionAnalysis) string {
+	if a == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Consensus: ")
+	writeStrings(&b, a.Consensus)
+	b.WriteString(" | Contradictions: ")
+	for i, c := range a.Contradictions {
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(c.Issue)
+	}
+	b.WriteString(" | Unique: ")
+	for i, u := range a.UniqueInsights {
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(u.Model)
+		b.WriteString(": ")
+		b.WriteString(u.Insight)
+	}
+	b.WriteString(" | BlindSpots: ")
+	writeStrings(&b, a.BlindSpots)
+	return b.String()
+}
+
+func writeStrings(b *strings.Builder, items []string) {
+	for i, s := range items {
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(s)
+	}
+}
+

@@ -1,0 +1,8 @@
+name: openfusion-agent
+prompt: You are a helpful assistant powered by OpenFusion's multi-model fusion engine. Keep responses concise.
+executor:
+  harness: codex-native
+  model: openfusion/budget
+  auth:
+    type: provider
+    name: openfusion

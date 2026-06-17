@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/lhy/openfusion/internal/logging"
 	"github.com/lhy/openfusion/internal/types"
 )
 
@@ -20,6 +21,7 @@ type Config struct {
 	RateLimit RateLimitConfig         `yaml:"rate_limit"`
 	Cache     CacheConfig             `yaml:"cache"`
 	Log       LogConfig               `yaml:"log"`
+	Logging   LoggingConfig           `yaml:"logging"`
 }
 
 // CacheConfig holds response cache configuration.
@@ -83,6 +85,11 @@ type LogConfig struct {
 	Level string `yaml:"level"` // debug, info, warn, error
 }
 
+// LoggingConfig controls the fusion logging hook.
+type LoggingConfig struct {
+	Hook logging.HookConfig `yaml:"hook"`
+}
+
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() *Config {
 	return &Config{
@@ -108,6 +115,9 @@ func DefaultConfig() *Config {
 			Enabled: false,
 			MaxSize: 1000,
 			TTL:     "300s",
+		},
+		Logging: LoggingConfig{
+			Hook: logging.DefaultHookConfig(),
 		},
 	}
 }

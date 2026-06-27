@@ -25,6 +25,16 @@ type Provider interface {
 	Name() string
 }
 
+// StreamProvider is an optional interface for providers that support
+// Server-Sent Events (SSE) streaming. Providers not implementing this
+// fall back to the non-streaming ChatCompletion path.
+type StreamProvider interface {
+	Provider
+
+	// StreamChat sends a chat request and returns a channel of stream chunks.
+	StreamChat(ctx context.Context, req *types.ChatRequest) (<-chan types.StreamChunk, error)
+}
+
 // ---------------------------------------------------------------------------
 // Manager
 // ---------------------------------------------------------------------------

@@ -92,6 +92,15 @@ func (m *mockEngine) GetPreset(name string) (*types.Preset, error) {
 	return &p, nil
 }
 
+func (m *mockEngine) ExecuteStream(w http.ResponseWriter, presetName string, req *types.ChatRequest) error {
+	resp, err := m.Execute(presetName, req)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "data: {\"content\":\"%s\"}\n\ndata: [DONE]\n\n", resp.Choices[0].Message.Content)
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -103,7 +112,7 @@ func TestListModels(t *testing.T) {
 			{ID: "openfusion/quality", Object: "model", OwnedBy: "openfusion"},
 		},
 	}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/v1/models", nil)
 	srv.Handler().ServeHTTP(rec, req)
@@ -127,7 +136,7 @@ func TestListModels(t *testing.T) {
 
 func TestChatCompletions_HappyPath(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 	payload := `{"model":"openfusion/budget","messages":[{"role":"user","content":"hello"}]}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(payload))
@@ -152,7 +161,7 @@ func TestChatCompletions_HappyPath(t *testing.T) {
 
 func TestChatCompletions_EmptyMessages(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 	payload := `{"model":"test","messages":[]}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(payload))
@@ -166,7 +175,7 @@ func TestChatCompletions_EmptyMessages(t *testing.T) {
 
 func TestChatCompletions_NoModel(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 	payload := `{"messages":[{"role":"user","content":"hi"}]}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(payload))
@@ -180,7 +189,7 @@ func TestChatCompletions_NoModel(t *testing.T) {
 
 func TestChatCompletions_PanelOverride_InvalidMember(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 	// Missing model in panel member
 	payload := `{"model":"test","messages":[{"role":"user","content":"hi"}],"panel":[{"provider":"p1"}]}`
 	rec := httptest.NewRecorder()
@@ -195,7 +204,7 @@ func TestChatCompletions_PanelOverride_InvalidMember(t *testing.T) {
 
 func TestChatCompletions_JudgeOverride_Invalid(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 	// Missing provider in judge override
 	payload := `{"model":"test","messages":[{"role":"user","content":"hi"}],"judge":{"model":"gpt4"}}`
 	rec := httptest.NewRecorder()
@@ -210,7 +219,7 @@ func TestChatCompletions_JudgeOverride_Invalid(t *testing.T) {
 
 func TestChatCompletions_ValidPanelOverride(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 	payload := `{"model":"test","messages":[{"role":"user","content":"hi"}],"panel":[{"provider":"p1","model":"m1"},{"provider":"p2","model":"m2"}],"judge":{"provider":"p1","model":"judge-model"}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(payload))
@@ -224,7 +233,7 @@ func TestChatCompletions_ValidPanelOverride(t *testing.T) {
 
 func TestChatCompletions_JudgeOverrideOnly(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 	payload := `{"model":"test","messages":[{"role":"user","content":"hi"}],"judge":{"provider":"p1","model":"judge-model"}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(payload))
@@ -261,7 +270,7 @@ func TestCacheKeyWithOverrides(t *testing.T) {
 
 func TestAuthMiddleware(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "secret123", ":8080", nil)
+	srv := NewServer(engine, "secret123", ":8080", nil, nil)
 	t.Run("no auth header", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/v1/models", nil)

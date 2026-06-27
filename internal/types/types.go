@@ -44,6 +44,7 @@ type StreamChunk struct {
 	Created int64          `json:"created"`
 	Model   string         `json:"model"`
 	Choices []StreamChoice `json:"choices"`
+	Error   string         `json:"error,omitempty"`
 }
 
 // StreamChoice represents a single streaming choice.

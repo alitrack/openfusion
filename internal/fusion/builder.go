@@ -3,7 +3,12 @@ package fusion
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/lhy/openfusion/internal/cache"
 	"github.com/lhy/openfusion/internal/config"
@@ -109,8 +114,19 @@ func buildFromConfig(cfg *config.Config) (*Engine, func(), error) {
 	// Create tracer
 	tracer := tracing.NewTracer()
 
+	// Load topology presets from directory
+	topologyDir := cfg.Presets.Dir + "/topology"
+	topologyPresets, err := loadTopologyPresets(topologyDir)
+	if err != nil {
+		logger.Warn("topology preset loading skipped", "error", err.Error())
+	}
+	if len(topologyPresets) > 0 {
+		logger.Info("topology presets loaded", "count", fmt.Sprintf("%d", len(topologyPresets)))
+	}
+
 	// Create engine
 	engine := NewEngine(pr, pm, panelTimeout, judgeTimeout, defaultTimeout, mc, fusionCache, healthChecker, tracer, sm, se)
+	engine.topologyPresets = topologyPresets
 
 	cleanup := func() {}
 
@@ -141,4 +157,45 @@ func setLogLevel(level string) {
 	default:
 		logger.LogLevel = "info"
 	}
+}
+
+// loadTopologyPresets loads multi-layer topology definitions from a directory.
+func loadTopologyPresets(dir string) (map[string]*TopologyDef, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // directory is optional
+		}
+		return nil, fmt.Errorf("read topology dir %s: %w", dir, err)
+	}
+
+	presets := make(map[string]*TopologyDef)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
+			continue
+		}
+
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", entry.Name(), err)
+		}
+
+		var topo TopologyDef
+		if err := yaml.Unmarshal(data, &topo); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", entry.Name(), err)
+		}
+		if err := topo.Validate(); err != nil {
+			return nil, fmt.Errorf("validate %s: %w", entry.Name(), err)
+		}
+
+		// Use filename without extension as preset name
+		name := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		presets[name] = &topo
+	}
+
+	return presets, nil
 }

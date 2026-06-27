@@ -39,6 +39,7 @@ type Engine struct {
 	cache          *cache.Cache
 	tracer         *tracing.Tracer
 	configPath     string
+	topologyPresets map[string]*TopologyDef // v4: multi-layer topology presets
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -203,7 +204,16 @@ func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error
 }
 
 // Execute runs the full fusion pipeline: panel → judge → response.
+// v4: If a topology preset exists, multi-layer fusion is used instead of legacy.
 func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.ChatResponse, error) {
+	// Check topology presets first (v4 multi-layer)
+	if topo, ok := e.topologyPresets[presetName]; ok {
+		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(ctx, e.defaultTimeout)
+		defer cancel()
+		return e.ExecuteTopology(ctx, topo, presetName, req)
+	}
+
 	p, ok := e.presetRegistry.Load().Get(presetName)
 	if !ok {
 		return nil, fmt.Errorf("unknown model: %s", presetName)

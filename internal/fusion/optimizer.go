@@ -22,14 +22,6 @@ type OptimizerConfig struct {
 	AppendMode string    `yaml:"append_mode" json:"append_mode"` // "tail" | "inline"
 }
 
-// GuardsConfig holds safety limits for fusion execution.
-type GuardsConfig struct {
-	MaxTotalTokens     int       `yaml:"max_total_tokens" json:"max_total_tokens"`
-	MaxRefTemperature  float64   `yaml:"max_ref_temperature" json:"max_ref_temperature"`
-	JudgeTemperature   float64   `yaml:"judge_temperature" json:"judge_temperature"`
-	FailoverAggregator *ModelRef `yaml:"failover_aggregator" json:"failover_aggregator,omitempty"`
-}
-
 // StripContext removes specified content types from messages.
 // Returns a NEW slice; original is untouched.
 func StripContext(msgs []types.ChatMessage, mode StripMode) []types.ChatMessage {

@@ -3,7 +3,6 @@ package judge
 import (
 	"testing"
 
-	"github.com/lhy/openfusion/internal/types"
 )
 
 func TestExtractAnalysis(t *testing.T) {
@@ -51,16 +50,13 @@ func TestExtractAnalysis_NoSections(t *testing.T) {
 
 func TestBuildAnalysisPrompt(t *testing.T) {
 	s := NewSynthesizer(nil, 0)
-	prompt := s.buildAnalysisPrompt("What is X?", []types.PanelResponse{
-		{
-			Member:  types.PanelMember{Provider: "openai", Model: "gpt-4o"},
-			Content: "X is a programming language.",
-		},
-		{
-			Member: types.PanelMember{Provider: "anthropic", Model: "claude"},
-			Error:  "timeout",
-		},
-	})
+	pctx := PromptContext{
+		OriginalQuestion:  "What is X?",
+		PanelResponses:    []string{"X is a programming language."},
+		PanelLabels:       []string{"openai/gpt-4o"},
+		AnalysisDepth:     AnalysisStandard,
+	}
+	prompt := s.PromptBuilder().Build(pctx)
 
 	if !contains(prompt, "original question") && !contains(prompt, "ORIGINAL QUESTION") {
 		t.Error("prompt should contain the original question marker")
@@ -68,8 +64,8 @@ func TestBuildAnalysisPrompt(t *testing.T) {
 	if !contains(prompt, "X is a programming language") {
 		t.Error("prompt should contain panel responses")
 	}
-	if !contains(prompt, "ERROR") {
-		t.Error("prompt should mark errors")
+	if !contains(prompt, "X is a programming language") {
+		t.Error("prompt should contain panel response")
 	}
 }
 

@@ -1,0 +1,58 @@
+name: research
+description: "深度研究 — 三模型融合，适合前沿技术调研、学术分析"
+triggers:
+  - categories: "research"
+    min_tokens: 30
+  - tokens: "200-10000"
+    categories: "analysis|research"
+  - tokens: "500-10000"
+    categories: "general"
+    requires_think: true
+
+mode: fusion
+strategy:
+  provider: modelscope
+  panel:
+    - provider: modelscope
+      model: deepseek-ai/DeepSeek-V4-Pro
+      system: |-
+        你是一位严谨的研究分析专家。
+        - 注重事实准确性、逻辑严密性
+        - 尽可能引用具体数据、论文、权威来源
+        - 回答要结构化，有清晰的论点论据
+        - 指出研究局限和不确定性
+      temperature: 0.1
+    - provider: modelscope
+      model: Qwen/Qwen3.5-122B-A10B
+      system: |-
+        你是一位多学科交叉研究专家。
+        - 擅长从多个学科视角分析问题
+        - 发现交叉领域的新见解和趋势
+        - 回答要全面、有深度、有前瞻性
+        - 关注技术演变脉络和未来方向
+      temperature: 0.3
+    - provider: modelscope
+      model: stepfun-ai/Step-3.7-Flash
+      system: |-
+        你是一位批判性思考者。
+        - 擅长发现论证漏洞、提出反例
+        - 挑战主流观点中的隐藏假设
+        - 帮助让分析更严谨、更客观
+        - 指出各方观点的争议点和论据强度
+      temperature: 0.5
+  judge:
+    provider: modelscope
+    model: ZhipuAI/GLM-5.1
+    enabled: true
+    system: |-
+        你是一位顶尖的学术研究员和编辑。三个 AI 模型对同一个问题做了深入研究回复。
+        请：1) 提取共识点（多个模型一致认可的部分，置信度最高）
+        2) 识别矛盾/分歧（哪些地方说法不同，给出双方论据）
+        3) 发现盲区（所有人都忽略但重要的方面）
+        4) 综合出超越任何单独回答的最终回答
+        输出格式：**结构化分析**（共识/矛盾/盲区）→ **综合回答**
+
+params:
+  max_tokens: 16384
+
+priority: 70

@@ -1,0 +1,16 @@
+name: frontier
+description: "前沿组合 — DS V4 Pro + Opus 4.6 + Flash → Pro Judge"
+panel:
+  - provider: cc-switch
+    model: deepseek-chat
+    system: "你是深度推理专家，注重严谨逻辑和全面分析。"
+  - provider: cc-switch
+    model: claude-opus-4-6
+    system: "你是广泛知识专家，覆盖多学科视角，给出结构清晰的综合回答。"
+  - provider: cc-switch
+    model: deepseek-v4-flash
+    system: "你是结构化分析专家，注重系统性整理和可操作的建议。"
+judge:
+  provider: cc-switch
+  model: deepseek-chat
+  system: "你是一位顶级的 AI 研究员。三个前沿模型给出了各自最佳回答，请提取各自最强之处，综合成超越任何单个模型的终极答案。"

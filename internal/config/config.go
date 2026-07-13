@@ -62,9 +62,10 @@ type PresetConfig struct {
 
 // FusionConfig holds fusion engine tuning parameters.
 type FusionConfig struct {
-	DefaultTimeout       int `yaml:"default_timeout"`
-	MaxConcurrent        int `yaml:"max_concurrent"`
-	PanelTimeoutPerModel int `yaml:"panel_timeout_per_model"`
+	DefaultTimeout       int                 `yaml:"default_timeout"`
+	MaxConcurrent        int                 `yaml:"max_concurrent"`
+	PanelTimeoutPerModel int                 `yaml:"panel_timeout_per_model"`
+	Router               types.RouterConfig  `yaml:"router"`
 }
 
 // RateLimitConfig holds rate limiting configuration.
@@ -105,6 +106,7 @@ func DefaultConfig() *Config {
 			DefaultTimeout:       120,
 			MaxConcurrent:        8,
 			PanelTimeoutPerModel: 60,
+			Router:               DefaultRouterConfig(),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled: false,
@@ -119,6 +121,14 @@ func DefaultConfig() *Config {
 		Logging: LoggingConfig{
 			Hook: logging.DefaultHookConfig(),
 		},
+	}
+}
+
+// DefaultRouterConfig returns a sensible default RouterConfig.
+func DefaultRouterConfig() types.RouterConfig {
+	return types.RouterConfig{
+		SimpleThreshold:  0.3,
+		ComplexThreshold: 0.7,
 	}
 }
 

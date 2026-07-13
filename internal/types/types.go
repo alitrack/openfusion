@@ -204,6 +204,33 @@ type FusionResult struct {
 }
 
 // ---------------------------------------------------------------------------
+// Model Router types
+// ---------------------------------------------------------------------------
+
+// RouterConfig defines model routing heuristics for dynamic panel/judge selection.
+type RouterConfig struct {
+	SimplePanel      []PanelMember `yaml:"simple_panel" json:"simple_panel"`
+	MediumPanel      []PanelMember `yaml:"medium_panel" json:"medium_panel"`
+	ComplexPanel     []PanelMember `yaml:"complex_panel" json:"complex_panel"`
+	SimpleJudge      JudgeConfig   `yaml:"simple_judge" json:"simple_judge"`
+	MediumJudge      JudgeConfig   `yaml:"medium_judge" json:"medium_judge"`
+	ComplexJudge     JudgeConfig   `yaml:"complex_judge" json:"complex_judge"`
+	SimpleThreshold  float64       `yaml:"simple_threshold" json:"simple_threshold"`
+	ComplexThreshold float64       `yaml:"complex_threshold" json:"complex_threshold"`
+}
+
+// RoutingMetrics holds the 5-dimension heuristic scores for model routing.
+type RoutingMetrics struct {
+	TokenEstimate     int     `json:"token_estimate"`     // chars/4
+	CodeMarkers       int     `json:"code_markers"`       // count of code indicators
+	ConversationDepth int     `json:"conversation_depth"` // number of messages
+	SystemPromptLen   int     `json:"system_prompt_len"`  // length of system prompt
+	ToolCount         int     `json:"tool_count"`         // number of tools
+	Score             float64 `json:"score"`              // composite score
+	Complexity        string  `json:"complexity"`         // "simple", "medium", "complex"
+}
+
+// ---------------------------------------------------------------------------
 // Utility helpers
 // ---------------------------------------------------------------------------
 

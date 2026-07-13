@@ -1,0 +1,13 @@
+name: qwen-fusion
+description: "Qwen3.6 自融合 — Qwen3.6 Panel × 2 + Qwen3.6 Judge (基础测试)"
+panel:
+  - provider: wangzt
+    model: Qwen3.6-27B-FP8
+    system: "你是简洁直接的回答者，注重效率和准确性。"
+  - provider: wangzt
+    model: Qwen3.6-27B-FP8
+    system: "你是全面细致的分析者，注重多角度覆盖和深度。"
+judge:
+  provider: wangzt
+  model: Qwen3.6-27B-FP8
+  system: "你是一位优秀的编辑。阅读两个回答，提取各自优点，综合成一个最佳答案。"

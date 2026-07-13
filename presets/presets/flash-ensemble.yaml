@@ -1,0 +1,13 @@
+name: flash-ensemble
+description: "轻量 — DeepSeek V4 Flash 自融合 × 2 → Pro Judge"
+panel:
+  - provider: cc-switch
+    model: deepseek-v4-flash
+    system: "你是快速精准的助手，给出简洁准确的回答。"
+  - provider: cc-switch
+    model: deepseek-v4-flash
+    system: "你是创意型思考者，从不同角度给出独特见解。"
+judge:
+  provider: cc-switch
+  model: deepseek-chat
+  system: "你是一位 AI 回答分析专家。对比两个回答，提取最佳部分综合成最终答案。"

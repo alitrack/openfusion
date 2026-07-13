@@ -109,8 +109,16 @@ func buildFromConfig(cfg *config.Config) (*Engine, func(), error) {
 	// Create tracer
 	tracer := tracing.NewTracer()
 
+	// Create model router from config
+	router := NewModelRouter(cfg.Fusion.Router)
+	logger.Info("model router configured",
+		"simple_threshold", fmt.Sprintf("%.2f", cfg.Fusion.Router.SimpleThreshold),
+		"complex_threshold", fmt.Sprintf("%.2f", cfg.Fusion.Router.ComplexThreshold),
+		"medium_panel_count", fmt.Sprintf("%d", len(cfg.Fusion.Router.MediumPanel)),
+	)
+
 	// Create engine
-	engine := NewEngine(pr, pm, panelTimeout, judgeTimeout, defaultTimeout, mc, fusionCache, healthChecker, tracer, sm, se)
+	engine := NewEngine(pr, pm, panelTimeout, judgeTimeout, defaultTimeout, mc, fusionCache, healthChecker, tracer, sm, se, router)
 
 	cleanup := func() {}
 

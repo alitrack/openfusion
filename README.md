@@ -25,6 +25,8 @@ Like OpenRouter Fusion, but self-hosted on your own infrastructure.
 | **MCP Knowledge integration** — MCP client module retrieves domain knowledge from external MCP servers (ChatSQL, OntoMind, knowledge bases) and injects context before panel dispatch | ✅ |
 | **Plugin system** — ModelPlugin interface for model-specific optimizations (e.g. DeepSeek think/temperature) | ✅ |
 | **Codex mode** — structured code output (language, files, explanation, tests) with `codex: true` | ✅ |
+| **Budget-adaptive routing (ModelRouter)** — heuristic complexity scoring (5 dimensions) selects panel size and judge model based on query complexity, saving tokens on simple queries | ✅ |
+| **Modular Judge Prompt (PromptBuilder)** — Section-based prompt assembly with AnalysisDepth control (Simple/Standard/Deep), injects web search & skill context | ✅ |
 | **Usage metrics & cost dashboard** — web dashboard at `/v1/dashboard`, per-request metrics | ✅ |
 | **OpenTelemetry tracing** — every panel/judge step tracked with spans (attributes: preset, model, tokens, cost) | ✅ |
 | **Per-preset rate limiting** — token bucket per preset, configurable rate + burst | ✅ |

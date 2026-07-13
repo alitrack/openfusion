@@ -11,7 +11,7 @@ import (
 
 func TestPresetsCRUD(t *testing.T) {
 	engine := &mockEngine{}
-	srv := NewServer(engine, "", ":8080", nil)
+	srv := NewServer(engine, "", ":8080", nil, nil)
 
 	// List presets (should be empty initially)
 	t.Run("list empty", func(t *testing.T) {

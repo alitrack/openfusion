@@ -1,0 +1,9 @@
+name: quality
+description: "基准 — DeepSeek V4 Pro 单模型 (直出 baseline)"
+panel:
+  - provider: cc-switch
+    model: deepseek-chat
+judge:
+  provider: cc-switch
+  model: deepseek-chat
+  system: "直接输出准确的回答。"

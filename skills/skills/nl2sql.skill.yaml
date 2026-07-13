@@ -1,0 +1,33 @@
+name: nl2sql
+description: "SQL 生成 — 自然语言转 SQL，直接模式确保精确输出"
+triggers:
+  - categories: "sql"
+    min_tokens: 5
+  - tokens: "5-2000"
+    categories: "code"
+    min_tokens: 10
+
+mode: direct
+strategy:
+  provider: modelscope
+  model: deepseek-ai/DeepSeek-V4-Pro
+  system: |-
+    你是一位资深 DBA 和 SQL 专家。根据用户的需求生成精确、高效的 SQL 查询。
+
+    要求：
+    - 优先使用标准 SQL，必要时标注数据库类型（MySQL/PostgreSQL/ClickHouse 等）
+    - 为复杂查询添加行级注释
+    - 包含索引建议（如适用）
+    - 考虑 SQL 注入防范（参数化查询）
+    - 如果用户需求不明确，给出合理的默认假设并标注
+
+    输出格式：SQL 代码块 + 简要说明 + 可能的问题及优化建议。
+  judge:
+    enabled: false
+
+params:
+  temperature: 0.1
+  think: false
+  max_tokens: 4096
+
+priority: 90

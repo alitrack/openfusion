@@ -1,0 +1,54 @@
+name: code-review
+description: "代码审查 — 自融合多方视角审查代码质量、安全、性能"
+triggers:
+  - categories: "code|review"
+    min_tokens: 50
+    requires_think: true
+  - tokens: "200-5000"
+    categories: "code"
+    requires_think: true
+  - tokens: "<1000"
+    categories: "analysis"
+    requires_think: true
+    priority_boost: true
+
+mode: self-ensemble
+strategy:
+  provider: modelscope
+  model: deepseek-ai/DeepSeek-V4-Pro
+  panel:
+    - system: |-
+        你是一位严格的代码安全审计专家。审查以下代码，关注：
+        - SQL 注入、XSS、CSRF 等安全漏洞
+        - 输入验证和输出编码
+        - 认证/授权漏洞
+        - 敏感信息泄露（密钥硬编码等）
+        - 依赖项安全风险
+
+        按优先级列出安全问题（Critical/High/Medium/Low），附上代码行号和修复建议。
+      think: true
+      temperature: 0.2
+    - system: |-
+        你是一位资深代码质量专家。审查以下代码，关注：
+        - 代码组织和可维护性
+        - 命名规范和代码风格
+        - 重复代码和设计模式
+        - 错误处理和边界条件
+        - 测试覆盖建议
+
+        给出具体的改进建议和重构方案。
+      think: true
+      temperature: 0.3
+  judge:
+    enabled: true
+    system: |-
+        你是一位技术主管 Lead。收到两份代码审查报告（安全+质量）：
+        1) 提取必须修复的问题（Critical/High）
+        2) 综合最佳改进方案
+        3) 按优先级输出最终审查报告
+        4) 给出 3 个最重要的改进建议（可立即执行）
+
+params:
+  max_tokens: 8192
+
+priority: 85

@@ -39,6 +39,7 @@ type Engine struct {
 	cache          *cache.Cache
 	tracer         *tracing.Tracer
 	configPath     string
+	router         *ModelRouter
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -54,12 +55,14 @@ func NewEngine(
 	tr *tracing.Tracer,
 	sm *skill.Matcher,
 	se *skill.Executor,
+	router *ModelRouter,
 ) *Engine {
 	e := &Engine{
 		defaultTimeout: defaultTimeout,
 		metrics:        mc,
 		cache:          ca,
 		tracer:         tr,
+		router:         router,
 	}
 	e.presetRegistry.Store(pr)
 	e.panelDispatch.Store(panel.NewDispatcher(pm, panelTimeout, hc, 0, 0))
@@ -91,6 +94,7 @@ func (e *Engine) Reload(cfgPath string) error {
 	e.skillMatcher.Store(newEngine.skillMatcher.Load())
 	e.skillExecutor.Store(newEngine.skillExecutor.Load())
 	e.providerMgr.Store(newEngine.providerMgr.Load())
+	e.router = newEngine.router
 
 	return nil
 }
@@ -211,6 +215,21 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 
 	// Apply request-level overrides (panel/judge) before execution
 	p = applyPresetOverrides(p, req.PanelOverride, req.JudgeOverride)
+
+	// Use ModelRouter to select panel/judge based on request complexity
+	// if the router is configured and has tiered panels
+	if e.router != nil && len(e.router.config.MediumPanel) > 0 {
+		routedPanel, routedJudge := e.router.SelectPreset(req)
+		if len(routedPanel) > 0 {
+			p = &types.Preset{
+				Name:        p.Name,
+				Description: p.Description,
+				Panel:       routedPanel,
+				Judge:       routedJudge,
+				WebSearch:   p.WebSearch,
+			}
+		}
+	}
 
 	ctx := context.Background()
 

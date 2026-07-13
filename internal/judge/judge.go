@@ -15,6 +15,45 @@ import (
 type Synthesizer struct {
 	providerManager *provider.Manager
 	timeout         time.Duration
+	promptBuilder   *JudgePromptBuilder
+}
+
+// SynthesizeOption is a functional option for customizing synthesis behavior.
+type SynthesizeOption func(*synthesizeOptions)
+
+type synthesizeOptions struct {
+	systemPrompt      string
+	webSearchContext  string
+	skillPromptContext string
+	analysisDepth     AnalysisDepth
+}
+
+// WithSystemPrompt sets a custom system prompt for the judge.
+func WithSystemPrompt(prompt string) SynthesizeOption {
+	return func(o *synthesizeOptions) {
+		o.systemPrompt = prompt
+	}
+}
+
+// WithWebSearchContext injects web search results into the judge prompt.
+func WithWebSearchContext(ctx string) SynthesizeOption {
+	return func(o *synthesizeOptions) {
+		o.webSearchContext = ctx
+	}
+}
+
+// WithSkillPromptContext injects skill-specific context into the judge prompt.
+func WithSkillPromptContext(ctx string) SynthesizeOption {
+	return func(o *synthesizeOptions) {
+		o.skillPromptContext = ctx
+	}
+}
+
+// WithAnalysisDepth sets the depth of analysis the judge should perform.
+func WithAnalysisDepth(depth AnalysisDepth) SynthesizeOption {
+	return func(o *synthesizeOptions) {
+		o.analysisDepth = depth
+	}
 }
 
 // NewSynthesizer creates a judge synthesizer.
@@ -22,12 +61,45 @@ func NewSynthesizer(pm *provider.Manager, timeout time.Duration) *Synthesizer {
 	return &Synthesizer{
 		providerManager: pm,
 		timeout:         timeout,
+		promptBuilder:   NewPromptBuilder(),
 	}
 }
 
 // Synthesize runs the judge: analyzes panel responses and produces the final answer.
+// Uses the default standard analysis depth and no extra context.
 func (s *Synthesizer) Synthesize(ctx context.Context, judgeCfg types.JudgeConfig, prompt string, panelResponses []types.PanelResponse) (*types.FusionResult, error) {
-	analysisPrompt := s.buildAnalysisPrompt(prompt, panelResponses)
+	return s.SynthesizeWithOptions(ctx, judgeCfg, prompt, panelResponses)
+}
+
+// SynthesizeWithOptions runs the judge with custom options.
+func (s *Synthesizer) SynthesizeWithOptions(ctx context.Context, judgeCfg types.JudgeConfig, prompt string, panelResponses []types.PanelResponse, opts ...SynthesizeOption) (*types.FusionResult, error) {
+	// Apply options
+	o := &synthesizeOptions{
+		analysisDepth: AnalysisStandard,
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	// Build labels and collect responses
+	labels := make([]string, len(panelResponses))
+	contents := make([]string, len(panelResponses))
+	for i, pr := range panelResponses {
+		labels[i] = pr.Member.Provider + " / " + pr.Member.Model
+		contents[i] = pr.Content
+	}
+
+	// Build the prompt using PromptBuilder
+	promptCtx := PromptContext{
+		OriginalQuestion:   prompt,
+		PanelResponses:     contents,
+		PanelLabels:        labels,
+		JudgeSystemPrompt:  o.systemPrompt,
+		AnalysisDepth:      o.analysisDepth,
+		WebSearchContext:   o.webSearchContext,
+		SkillPromptContext: o.skillPromptContext,
+	}
+	analysisPrompt := s.promptBuilder.Build(promptCtx)
 
 	p, err := s.providerManager.Get(judgeCfg.Provider)
 	if err != nil {
@@ -84,56 +156,9 @@ func (s *Synthesizer) Synthesize(ctx context.Context, judgeCfg types.JudgeConfig
 	return result, nil
 }
 
-// buildAnalysisPrompt constructs the prompt sent to the judge model.
-func (s *Synthesizer) buildAnalysisPrompt(originalPrompt string, responses []types.PanelResponse) string {
-	var b strings.Builder
-
-	b.WriteString("You are an expert AI response analyst. Below is a complex research question followed by answers from multiple AI models.\n\n")
-	b.WriteString("=== ORIGINAL QUESTION ===\n")
-	b.WriteString(originalPrompt)
-	b.WriteString("\n\n")
-
-	for _, pr := range responses {
-		b.WriteString("=== ")
-		b.WriteString(pr.Member.Provider)
-		b.WriteString(" / ")
-		b.WriteString(pr.Member.Model)
-		b.WriteString(" ===\n")
-
-		if pr.Error != "" {
-			b.WriteString("[ERROR: ")
-			b.WriteString(pr.Error)
-			b.WriteString("]\n\n")
-			continue
-		}
-
-		b.WriteString(pr.Content)
-		b.WriteString("\n\n")
-	}
-
-	b.WriteString(`Please analyze these responses and produce:
-
-## Structured Analysis
-
-1. **Consensus Points**: What all or most models agree on (high confidence findings).
-2. **Contradictions**: Where models disagree. For each, note which model said what.
-3. **Partial Coverage**: Important points only covered by some models.
-4. **Unique Insights**: Valuable points made by only a single model (with source).
-5. **Blind Spots**: Important angles or facts that ALL models missed.
-
-## Final Answer
-
-Write a comprehensive, well-structured final answer that:
-- Synthesizes the best reasoning from all models
-- Notes areas of agreement as higher-confidence
-- Honestly acknowledges contradictions where they exist
-- Highlights any unique insights
-- Acknowledges blind spots
-- Is written as a coherent narrative (not a comparison table)
-
-Base your answer ONLY on the content provided by the models. Do not add external knowledge.
-`)
-	return b.String()
+// PromptBuilder returns the internal prompt builder for external use.
+func (s *Synthesizer) PromptBuilder() *JudgePromptBuilder {
+	return s.promptBuilder
 }
 
 // extractAnalysis does simple keyword-based extraction for structured analysis.

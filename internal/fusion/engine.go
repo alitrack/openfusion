@@ -41,7 +41,14 @@ type Engine struct {
 	cache          *cache.Cache
 	tracer         *tracing.Tracer
 	configPath     string
-	topologyPresets map[string]*TopologyDef // v4: multi-layer topology presets
+	dagPlanner     DAGPlannerConfig
+}
+
+// DAGPlannerConfig holds DAG planner settings.
+type DAGPlannerConfig struct {
+	Provider  string
+	Model     string
+	MaxTokens int
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -106,6 +113,11 @@ func (e *Engine) getProviderManager() *provider.Manager {
 // SetConfigPath stores the config path for use by Reload.
 func (e *Engine) SetConfigPath(path string) {
 	e.configPath = path
+}
+
+// SetDAGPlanner configures the DAG decomposition planner.
+func (e *Engine) SetDAGPlanner(cfg DAGPlannerConfig) {
+	e.dagPlanner = cfg
 }
 
 // ListPresets returns all registered presets as API summaries.
@@ -206,16 +218,7 @@ func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error
 }
 
 // Execute runs the full fusion pipeline: panel → judge → response.
-// v4: If a topology preset exists, multi-layer fusion is used instead of legacy.
 func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.ChatResponse, error) {
-	// Check topology presets first (v4 multi-layer)
-	if topo, ok := e.topologyPresets[presetName]; ok {
-		ctx := context.Background()
-		ctx, cancel := context.WithTimeout(ctx, e.defaultTimeout)
-		defer cancel()
-		return e.ExecuteTopology(ctx, topo, presetName, req)
-	}
-
 	p, ok := e.presetRegistry.Load().Get(presetName)
 	if !ok {
 		return nil, fmt.Errorf("unknown model: %s", presetName)
@@ -348,8 +351,9 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		Choices: []types.Choice{
 			{Index: 0, Message: types.ChatMessage{Role: "assistant", Content: result.Answer}},
 		},
-		Usage:    result.Usage,
-		Analysis: result.Analysis,
+		Usage:          result.Usage,
+		Analysis:       result.Analysis,
+		PanelResponses: buildPanelSummaries(panelResponses),
 	}
 
 	// Attach structured codex output if requested
@@ -370,24 +374,10 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 // buildPanelOnlyResponse constructs a response without judge synthesis.
 func buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) *types.ChatResponse {
 	var b strings.Builder
-	summaries := make([]types.PanelResponseSummary, 0, len(responses))
 	totalUsage := types.Usage{}
 
 	for _, pr := range responses {
-		summary := types.PanelResponseSummary{
-			Model:      pr.Member.Model,
-			DurationMs: pr.Duration.Milliseconds(),
-			CostUSD:    pr.Usage.CostUSD,
-			Error:      pr.Error,
-		}
-		if pr.TimedOut {
-			summary.Error = "timeout"
-		}
 		if pr.Error == "" && !pr.TimedOut {
-			summary.Content = pr.Content
-			summary.PromptTokens = pr.Usage.PromptTokens
-			summary.CompletionTokens = pr.Usage.CompletionTokens
-			summary.TotalTokens = pr.Usage.TotalTokens
 			totalUsage.PromptTokens += pr.Usage.PromptTokens
 			totalUsage.CompletionTokens += pr.Usage.CompletionTokens
 			totalUsage.TotalTokens += pr.Usage.TotalTokens
@@ -406,8 +396,6 @@ func buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) 
 			b.WriteString(pr.Content)
 		}
 		b.WriteString("\n\n")
-
-		summaries = append(summaries, summary)
 	}
 
 	return &types.ChatResponse{
@@ -418,8 +406,32 @@ func buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) 
 			{Index: 0, Message: types.ChatMessage{Role: "assistant", Content: strings.TrimSpace(b.String())}},
 		},
 		Usage:          totalUsage,
-		PanelResponses: summaries,
+		PanelResponses: buildPanelSummaries(responses),
 	}
+}
+
+// buildPanelSummaries creates a summary slice from panel responses for logging.
+func buildPanelSummaries(responses []types.PanelResponse) []types.PanelResponseSummary {
+	summaries := make([]types.PanelResponseSummary, 0, len(responses))
+	for _, pr := range responses {
+		summary := types.PanelResponseSummary{
+			Model:      pr.Member.Model,
+			DurationMs: pr.Duration.Milliseconds(),
+			CostUSD:    pr.Usage.CostUSD,
+			Error:      pr.Error,
+		}
+		if pr.TimedOut {
+			summary.Error = "timeout"
+		}
+		if pr.Error == "" && !pr.TimedOut {
+			summary.Content = pr.Content
+			summary.PromptTokens = pr.Usage.PromptTokens
+			summary.CompletionTokens = pr.Usage.CompletionTokens
+			summary.TotalTokens = pr.Usage.TotalTokens
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries
 }
 
 // applyPresetOverrides applies request-level panel/judge overrides to a preset.

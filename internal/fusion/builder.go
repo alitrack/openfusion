@@ -126,7 +126,8 @@ func buildFromConfig(cfg *config.Config) (*Engine, func(), error) {
 
 	// Create engine
 	engine := NewEngine(pr, pm, panelTimeout, judgeTimeout, defaultTimeout, mc, fusionCache, healthChecker, tracer, sm, se)
-	engine.topologyPresets = topologyPresets
+	// topologyPresets deprecated — v4 multi-layer removed
+	_ = topologyPresets
 
 	cleanup := func() {}
 

@@ -83,7 +83,7 @@ def search_local_files(query: str) -> str:
                         results.append({
                             "file": fname,
                             "relevance": match_count,
-                            "snippet": content[:500]
+                            "snippet": content[:4000]
                         })
                 except Exception:
                     pass

@@ -18,10 +18,23 @@ type Config struct {
 	Providers map[string]ProviderDef  `yaml:"providers"`
 	Presets   PresetConfig            `yaml:"presets"`
 	Fusion    FusionConfig            `yaml:"fusion"`
+	DAG       DAGConfig               `yaml:"dag"`
 	RateLimit RateLimitConfig         `yaml:"rate_limit"`
 	Cache     CacheConfig             `yaml:"cache"`
 	Log       LogConfig               `yaml:"log"`
 	Logging   LoggingConfig           `yaml:"logging"`
+}
+
+// DAGConfig holds ATG/DAG task decomposition settings.
+type DAGConfig struct {
+	Planner DAGPlannerConfig `yaml:"planner"`
+}
+
+// DAGPlannerConfig configures the LLM used for task decomposition.
+type DAGPlannerConfig struct {
+	Provider  string `yaml:"provider"`
+	Model     string `yaml:"model"`
+	MaxTokens int    `yaml:"max_tokens"`
 }
 
 // CacheConfig holds response cache configuration.

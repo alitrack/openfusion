@@ -27,6 +27,8 @@ type FusionEngine interface {
 	ExecuteStream(w http.ResponseWriter, presetName string, req *types.ChatRequest) error
 	// ExecuteAuto uses skill matching to automatically route the request.
 	ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error)
+	// ExecuteDAG decomposes a complex task into a DAG, executes it, and returns the result.
+	ExecuteDAG(req *types.ChatRequest) (*types.ChatResponse, error)
 	// ListPresets returns all available preset summaries.
 	ListPresets() []PresetSummary
 	// Metrics returns the metrics collector for snapshot retrieval.
@@ -86,6 +88,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /v1/dashboard", s.handleDashboard)
 	s.mux.HandleFunc("GET /", s.handleDashboard)
 	s.mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
+	s.mux.HandleFunc("POST /v1/messages", s.handleAnthropicMessages)
 	s.mux.HandleFunc("GET /v1/presets", s.handleListPresetsDetail)
 	s.mux.HandleFunc("POST /v1/presets", s.handleCreatePreset)
 	s.mux.HandleFunc("GET /v1/presets/{name}", s.handleGetPreset)
@@ -358,6 +361,18 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 		s.log.Warn("auto-route failed", "error", err.Error())
 		writeError(w, http.StatusInternalServerError, "auto-route failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	// DAG mode: decompose complex task → execute with topological parallelism → repair
+	if model == "dag" || model == "openfusion/dag" {
+		resp, err := s.engine.ExecuteDAG(&req)
+		if err != nil {
+			s.log.Warn("dag execution failed", "error", err.Error())
+			writeError(w, http.StatusInternalServerError, "dag execution failed")
 			return
 		}
 		writeJSON(w, http.StatusOK, resp)

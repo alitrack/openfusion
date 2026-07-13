@@ -10,11 +10,11 @@ func TestLoadTestSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTestSet() error: %v", err)
 	}
-	if ts.Version != 1 {
-		t.Errorf("version = %d, want 1", ts.Version)
+	if ts.Version != 2 {
+		t.Errorf("version = %d, want 2", ts.Version)
 	}
-	if len(ts.Tasks) != 10 {
-		t.Errorf("tasks = %d, want 10", len(ts.Tasks))
+	if len(ts.Tasks) != 30 {
+		t.Errorf("tasks = %d, want 30", len(ts.Tasks))
 	}
 }
 
@@ -24,7 +24,11 @@ func TestTaskCategories(t *testing.T) {
 	for _, task := range ts.Tasks {
 		cats[task.Category]++
 	}
-	expected := map[string]int{"factual": 2, "reasoning": 2, "code": 2, "synthesis": 2, "controversial": 2}
+	expected := map[string]int{
+		"factual": 3, "reasoning": 3, "code": 3, "synthesis": 3,
+		"controversial": 3, "translation": 3, "data-analysis": 3,
+		"creative": 3, "security": 3, "performance": 3,
+	}
 	for cat, count := range expected {
 		if cats[cat] != count {
 			t.Errorf("category %s: got %d, want %d", cat, cats[cat], count)

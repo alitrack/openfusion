@@ -73,7 +73,7 @@ judge:
 	engine := fusion.NewEngine(pr, pm, 5, 10, 30, nil, nil, nil, nil, nil, nil)
 
 	// HTTP API server
-	srv := api.NewServer(engine, "", ":0", nil)
+	srv := api.NewServer(engine, "", "127.0.0.1:0", nil, nil)
 	httpSrv := httptest.NewServer(srv.Handler())
 	defer httpSrv.Close()
 

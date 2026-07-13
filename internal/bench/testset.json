@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "description": "OpenFusion benchmark test set — 10 tasks across 5 categories",
+  "version": 2,
+  "description": "OpenFusion benchmark test set — 30 tasks across 10 categories",
   "tasks": [
     {
       "id": "fact-001",
@@ -17,6 +17,13 @@
       "scoring_criteria": "Must mention 32 vs 128 bit, dotted decimal vs colon hex, address exhaustion as primary motivation."
     },
     {
+      "id": "fact-003",
+      "category": "factual",
+      "prompt": "List the first 5 elements of the periodic table in order. Include their atomic numbers, symbols, and one key property of each.",
+      "reference": "1-H-Hydrogen(lightest), 2-He-Helium(noble gas), 3-Li-Lithium(lightest metal), 4-Be-Beryllium(toxic), 5-B-Boron(metalloid)",
+      "scoring_criteria": "Correct order, atomic numbers, symbols. At least one valid property per element."
+    },
+    {
       "id": "reason-001",
       "category": "reasoning",
       "prompt": "If 3 cats catch 3 mice in 3 minutes, how many minutes would it take 100 cats to catch 100 mice? Explain your reasoning step by step.",
@@ -28,21 +35,35 @@
       "category": "reasoning",
       "prompt": "You have a 3-gallon jug and a 5-gallon jug. How can you measure exactly 4 gallons of water?",
       "reference": "Fill 5, pour into 3 (5 has 2 left). Empty 3, pour remaining 2 into 3. Fill 5, pour into 3 until full (needs 1 more). 5 now has 4.",
-      "scoring_criteria": "Must give correct sequence. Multiple solutions accepted (e.g. the 3→5 approach also valid). Clear step listing."
+      "scoring_criteria": "Must give correct sequence. Multiple solutions accepted. Clear step listing."
+    },
+    {
+      "id": "reason-003",
+      "category": "reasoning",
+      "prompt": "A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost?",
+      "reference": "Ball = $0.05, Bat = $1.05. If ball = x, then bat = x + 1.00. x + (x + 1.00) = 1.10 → 2x = 0.10 → x = 0.05.",
+      "scoring_criteria": "Must identify correct answer ($0.05). Common wrong answer ($0.10) should be explicitly addressed."
     },
     {
       "id": "code-001",
       "category": "code",
       "prompt": "Write a Go function to reverse a singly linked list. Include the struct definition and a testable function.",
-      "reference": "type ListNode struct { Val int; Next *ListNode }. func reverseList(head *ListNode) *ListNode { var prev *ListNode; cur := head; for cur != nil { next := cur.Next; cur.Next = prev; prev = cur; cur = next }; return prev }",
+      "reference": "type ListNode struct { Val int; Next *ListNode }. Iterative: var prev *ListNode; for cur != nil { next := cur.Next; cur.Next = prev; prev = cur; cur = next }; return prev",
       "scoring_criteria": "Iterative approach (or recursive accepted). Must modify pointers, not values. O(n) time, O(1) space. Proper struct definition."
     },
     {
       "id": "code-002",
       "category": "code",
       "prompt": "Write a Python function using asyncio to fetch 10 URLs concurrently with a timeout of 5 seconds per request. Handle individual failures gracefully.",
-      "reference": "async def fetch(session, url): try: async with session.get(url, timeout=aiohttp.ClientTimeout(5)) as r: return await r.text() except: return None. Use asyncio.gather for concurrency.",
+      "reference": "async with aiohttp.ClientSession() as s: tasks = [fetch(s, url) for url in urls]; await asyncio.gather(*tasks, return_exceptions=True)",
       "scoring_criteria": "Uses asyncio + aiohttp (or httpx). Timeout per request. Concurrent execution. Graceful error handling per URL."
+    },
+    {
+      "id": "code-003",
+      "category": "code",
+      "prompt": "Write a Rust function that reads a text file, counts the frequency of each word (case-insensitive), and returns the top 10 most frequent words as a Vec<(String, usize)>. Handle file not found and empty files.",
+      "reference": "use std::collections::HashMap; read_to_string → split_whitespace → to_lowercase → count → sort by count desc → take(10)",
+      "scoring_criteria": "Correct use of HashMap for counting. Case-insensitive. Sorted by frequency descending. Error handling for missing/empty file. Proper Rust idioms."
     },
     {
       "id": "synth-001",
@@ -59,6 +80,13 @@
       "scoring_criteria": "Accurate description of each method. Fair comparison of trade-offs. Mention DPO as RLHF alternative without reward model."
     },
     {
+      "id": "synth-003",
+      "category": "synthesis",
+      "prompt": "Compare Docker containers vs WebAssembly (Wasm) for server-side application deployment. Cover isolation, startup time, resource overhead, security model, and ecosystem maturity.",
+      "reference": "Docker: OS-level isolation, seconds startup, MB-GB images, mature ecosystem. Wasm: sandbox isolation, ms startup, KB-MB modules, younger ecosystem, language constraints. Docker for complex apps, Wasm for lightweight functions.",
+      "scoring_criteria": "Fair comparison of both technologies. Cover all listed dimensions. Note Wasm's growing but younger ecosystem. Practical guidance on when to use each."
+    },
+    {
       "id": "cont-001",
       "category": "controversial",
       "prompt": "Is RAG (Retrieval-Augmented Generation) better than long-context models for knowledge-intensive tasks? Discuss the trade-offs including cost, latency, accuracy, and maintenance.",
@@ -71,6 +99,118 @@
       "prompt": "Should open-source AI models be regulated differently from closed-source models? Discuss the arguments for and against, including safety, innovation, and accessibility considerations.",
       "reference": "Pro-regulation: open weights can't be recalled, fine-tuned for harm. Anti: open source drives innovation, transparency enables safety research. Middle ground: compute-level vs weight-level regulation.",
       "scoring_criteria": "Presents both sides fairly. Mentions specific policy proposals (compute thresholds, weight registration). Acknowledges complexity. No straw-man arguments."
+    },
+    {
+      "id": "cont-003",
+      "category": "controversial",
+      "prompt": "Is microservices architecture still the right default choice for new projects in 2025? Consider complexity, team size, deployment overhead, and alternatives like modular monoliths.",
+      "reference": "Microservices: independent scaling/deploy, team autonomy, polyglot — but network complexity, distributed debugging, data consistency challenges. Modular monolith: simpler ops, easier testing, can extract services later as needed. Start monolith, extract when necessary.",
+      "scoring_criteria": "Presents trade-offs honestly. Acknowledges that microservices are not universally better. Mentions modular monolith as viable alternative. Context-dependent guidance."
+    },
+    {
+      "id": "trans-001",
+      "category": "translation",
+      "prompt": "Translate the following English paragraph to Chinese, maintaining technical precision and natural flow:\n\n'Event-driven architecture decouples producers from consumers through an event bus. Events represent state changes and are immutable facts. This pattern is particularly suited for distributed systems where components need to react to changes asynchronously.'",
+      "reference": "事件驱动架构通过事件总线将生产者与消费者解耦。事件表示状态变化，是不可变的事实。这种模式特别适用于分布式系统，其中各个组件需要异步响应变化。",
+      "scoring_criteria": "Accurate technical terms. Natural Chinese flow. Complete translation. No missing key concepts (decouple, immutable, asynchronous)."
+    },
+    {
+      "id": "trans-002",
+      "category": "translation",
+      "prompt": "Translate the following Chinese technical text to English:\n\n'微服务架构的核心思想是将单一应用程序划分为一组小服务，每个服务运行在自己的进程中，并通过轻量级机制（通常是HTTP API）进行通信。这些服务围绕业务能力构建，可以由不同的团队独立开发、部署和扩展。'",
+      "reference": "The core idea of microservices architecture is to divide a single application into a set of small services, each running in its own process and communicating through lightweight mechanisms (typically HTTP APIs). These services are built around business capabilities and can be independently developed, deployed, and scaled by different teams.",
+      "scoring_criteria": "Accurate translation of all technical concepts. Natural English flow. Preserves all key ideas (small services, own process, lightweight mechanism, business capabilities, independent dev/deploy/scale)."
+    },
+    {
+      "id": "trans-003",
+      "category": "translation",
+      "prompt": "Translate this French paragraph to English:\n\n'L'intelligence artificielle générative a connu une progression remarquable depuis 2022. Les modèles de langage de grande taille peuvent désormais comprendre et générer du texte avec une fluidité impressionnante, bien que des défis persistent en matière de fiabilité factuelle et de raisonnement mathématique.'",
+      "reference": "Generative artificial intelligence has seen remarkable progress since 2022. Large language models can now understand and generate text with impressive fluency, although challenges remain regarding factual reliability and mathematical reasoning.",
+      "scoring_criteria": "Accurate translation. Natural English. Preserves nuance of 'fiabilité factuelle' (factual reliability) and 'raisonnement mathématique' (mathematical reasoning)."
+    },
+    {
+      "id": "data-001",
+      "category": "data-analysis",
+      "prompt": "You have a table 'orders' with columns: order_id, customer_id, order_date, amount, status. Write a SQL query that returns the top 5 customers by total spending in 2024, but only for orders with status = 'completed'. Include customer_id and total_spent in the output.",
+      "reference": "SELECT customer_id, SUM(amount) AS total_spent FROM orders WHERE status = 'completed' AND strftime('%Y', order_date) = '2024' GROUP BY customer_id ORDER BY total_spent DESC LIMIT 5;",
+      "scoring_criteria": "Correct GROUP BY + SUM + ORDER BY DESC + LIMIT. Proper filter for status='completed' and year=2024. Clean readable SQL."
+    },
+    {
+      "id": "data-002",
+      "category": "data-analysis",
+      "prompt": "Explain the difference between INNER JOIN, LEFT JOIN, and CROSS JOIN in SQL. Provide a simple example scenario where each would be appropriate.",
+      "reference": "INNER JOIN: only matching rows from both tables. LEFT JOIN: all rows from left table + matching from right (nulls for no match). CROSS JOIN: Cartesian product (every row × every row). Examples: INNER for customers with orders, LEFT for all customers even without orders, CROSS for generating combinations.",
+      "scoring_criteria": "Correct definitions for all three. Distinct example per join type. Clear explanation, not just syntax."
+    },
+    {
+      "id": "data-003",
+      "category": "data-analysis",
+      "prompt": "You have a pandas DataFrame 'df' with columns: date, product, region, sales, units. Write Python code to: 1) calculate total sales per region, 2) find the top-selling product in each region, 3) create a pivot table showing monthly sales by product. Use method chaining where appropriate.",
+      "reference": "df.groupby('region').sales.sum(); df.sort_values('sales', ascending=False).groupby('region').first()[['product']]; df.assign(month=df.date.dt.month).pivot_table(values='sales', index='month', columns='product', aggfunc='sum')",
+      "scoring_criteria": "Correct pandas operations. Uses groupby, pivot_table. Clean chaining. Proper handling of the three sub-questions."
+    },
+    {
+      "id": "create-001",
+      "category": "creative",
+      "prompt": "Write a haiku about debugging code at 3 AM.",
+      "reference": "5-7-5 syllable structure. Should capture the frustration/isolation/revelation of late-night debugging. No required specific words, but theme must be clear.",
+      "scoring_criteria": "Correct haiku structure (5-7-5 syllables). On-theme (debugging at night). Evocative imagery. Not just a technical description."
+    },
+    {
+      "id": "create-002",
+      "category": "creative",
+      "prompt": "Write a product description (50-100 words) for a fictional smart water bottle called 'HydraSense' that tracks hydration, reminds you to drink, and syncs with fitness apps. Make it compelling but not overhyped.",
+      "reference": "Should mention key features (tracking, reminders, sync) in natural language. Professional but engaging tone. No fake statistics.",
+      "scoring_criteria": "Within 50-100 words. Covers all three features naturally. Professional tone. Avoids cliché marketing phrases ('revolutionary', 'game-changing')."
+    },
+    {
+      "id": "create-003",
+      "category": "creative",
+      "prompt": "Write a README.md introduction (3-4 paragraphs) for an open-source project called 'turbovec' — a 4-bit vector quantization library in Rust. Include: what it does, why it's useful, a 2-line code example, and installation instructions.",
+      "reference": "Should cover: 4-bit quantization for vectors, Rust library, performance benefits, use case (RAG/semantic search). Code example should show basic quantization. Installation via cargo add.",
+      "scoring_criteria": "Complete sections (what, why, code, install). Code example compiles conceptually. Professional README tone. 3-4 paragraphs."
+    },
+    {
+      "id": "sec-001",
+      "category": "security",
+      "prompt": "Explain SQL injection: what it is, how it works, and three different ways to prevent it in a web application. Include code examples for at least one prevention method.",
+      "reference": "SQL injection: malicious SQL inserted through user input. Works by breaking out of intended query context. Prevention: parameterized queries (best), input validation, ORM, least privilege, WAF.",
+      "scoring_criteria": "Clear explanation of the attack mechanism. At least 3 distinct prevention methods. One with code example. Mentions parameterized queries as primary defense."
+    },
+    {
+      "id": "sec-002",
+      "category": "security",
+      "prompt": "Compare JWT (JSON Web Tokens) vs session-based authentication for a REST API. Cover statelessness, scalability, revocation, token size, and security considerations.",
+      "reference": "JWT: stateless, scalable horizontally, harder to revoke (need blocklist or short expiry), larger payload, client-side storage risks. Session: stateful, server-side storage, easy revocation, smaller cookie, requires sticky sessions or shared store.",
+      "scoring_criteria": "Balanced comparison. Covers all listed dimensions. Practical guidance on choosing (JWT for microservices, sessions for monolithic). Mentions security best practices for each."
+    },
+    {
+      "id": "sec-003",
+      "category": "security",
+      "prompt": "What is the OWASP Top 10? List the top 3 risks from the most recent edition and briefly explain how to mitigate each.",
+      "reference": "OWASP Top 10 (2021): A01-Broken Access Control, A02-Cryptographic Failures, A03-Injection. Mitigations: enforce access control server-side, use strong encryption with proper key management, parameterized queries + input validation.",
+      "scoring_criteria": "Correctly identifies OWASP Top 10 purpose. Names top 3 from 2021 edition. Provides actionable mitigation per risk. Not generic security advice."
+    },
+    {
+      "id": "perf-001",
+      "category": "performance",
+      "prompt": "A web application's API endpoint response time increased from 200ms to 2 seconds after a database migration. Walk through a systematic debugging approach to identify the root cause.",
+      "reference": "1) Reproduce and measure precisely. 2) Check DB query plans (EXPLAIN ANALYZE). 3) Look for missing indexes. 4) Check N+1 queries. 5) Monitor DB connection pool. 6) Check for locks/contention. 7) Verify query changes in migration.",
+      "scoring_criteria": "Systematic approach with clear steps. Mentions EXPLAIN ANALYZE. Mentions indexes and N+1 as common causes. Practical, not theoretical."
+    },
+    {
+      "id": "perf-002",
+      "category": "performance",
+      "prompt": "Explain the difference between horizontal and vertical scaling. For a CPU-bound workload that processes independent tasks, which scaling approach is more cost-effective at large scale and why?",
+      "reference": "Vertical: bigger machine (more CPU/RAM). Horizontal: more machines. CPU-bound independent tasks → horizontal scaling wins at scale because: linear cost scaling, no single-machine ceiling, commodity hardware cheaper than high-end servers, fault isolation.",
+      "scoring_criteria": "Clear definitions. Correct recommendation for CPU-bound independent tasks. Economic reasoning (commodity vs high-end). Mentions fault tolerance as bonus."
+    },
+    {
+      "id": "perf-003",
+      "category": "performance",
+      "prompt": "Describe three common causes of memory leaks in Go applications and how to detect them using pprof. Include specific pprof commands or flags.",
+      "reference": "Causes: 1) goroutine leak (blocked on channel), 2) global map/slice growing unbounded, 3) time.Ticker not stopped. Detection: go tool pprof -http :8080 http://localhost:6060/debug/pprof/heap, go tool pprof -http :8080 http://localhost:6060/debug/pprof/goroutine.",
+      "scoring_criteria": "Three distinct, real Go-specific leak patterns. Correct pprof commands. Practical detection steps. Not generic memory management advice."
     }
   ]
 }

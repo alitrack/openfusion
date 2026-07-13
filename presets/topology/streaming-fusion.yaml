@@ -1,0 +1,14 @@
+# Streaming Fusion — 2-layer topology with streaming enabled
+# Usage: POST /v1/chat/completions {"model":"streaming-fusion","stream":true}
+layers:
+  - name: panel
+    models:
+      - provider: deepseek
+        model: deepseek-chat
+      - provider: cc-switch
+        model: gpt-5.5
+  - name: judge
+    role: judge
+    models:
+      - provider: cc-switch
+        model: claude-opus-4-5-20251101

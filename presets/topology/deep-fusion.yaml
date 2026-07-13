@@ -1,0 +1,20 @@
+# Deep Fusion — 3-layer topology (MoA 2.0 inspired)
+# Usage: POST /v1/chat/completions {"model":"deep-fusion"}
+layers:
+  - name: proposers
+    models:
+      - provider: deepseek
+        model: deepseek-chat
+      - provider: cc-switch
+        model: gpt-5.5
+  - name: critics
+    models:
+      - provider: cc-switch
+        model: claude-opus-4-5-20251101
+      - provider: deepseek
+        model: deepseek-chat
+  - name: aggregator
+    role: judge
+    models:
+      - provider: cc-switch
+        model: claude-opus-4-5-20251101

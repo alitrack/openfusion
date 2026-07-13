@@ -40,6 +40,14 @@ type Engine struct {
 	tracer         *tracing.Tracer
 	configPath     string
 	router         *ModelRouter
+	dagPlanner     DAGPlannerConfig
+}
+
+// DAGPlannerConfig holds DAG planner settings.
+type DAGPlannerConfig struct {
+	Provider  string
+	Model     string
+	MaxTokens int
 }
 
 // NewEngine creates the fusion orchestration engine.
@@ -463,4 +471,9 @@ func deepCopyPreset(p *types.Preset) *types.Preset {
 		cp.WebSearch = &w
 	}
 	return cp
+}
+
+// SetModelRouter configures the ModelRouter for budget-adaptive fusion.
+func (e *Engine) SetModelRouter(r *ModelRouter) {
+	e.router = r
 }

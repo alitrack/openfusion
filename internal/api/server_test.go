@@ -41,6 +41,10 @@ func (m *mockEngine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, e
 	return m.Execute("openfusion/auto", req)
 }
 
+func (m *mockEngine) ExecuteDAG(req *types.ChatRequest) (*types.ChatResponse, error) {
+	return m.Execute("openfusion/dag", req)
+}
+
 func (m *mockEngine) ListPresets() []PresetSummary {
 	return m.presets
 }
@@ -90,6 +94,15 @@ func (m *mockEngine) GetPreset(name string) (*types.Preset, error) {
 		return nil, fmt.Errorf("not found: %s", name)
 	}
 	return &p, nil
+}
+
+func (m *mockEngine) ExecuteStream(w http.ResponseWriter, presetName string, req *types.ChatRequest) error {
+	resp, err := m.Execute(presetName, req)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "data: {\"content\":\"%s\"}\n\ndata: [DONE]\n\n", resp.Choices[0].Message.Content)
+	return nil
 }
 
 // ---------------------------------------------------------------------------

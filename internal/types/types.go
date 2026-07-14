@@ -30,6 +30,9 @@ type ChatRequest struct {
 	PanelOverride []PanelMember `json:"panel,omitempty"`
 	// JudgeOverride replaces the preset's judge entirely when non-nil.
 	JudgeOverride *JudgeConfig `json:"judge,omitempty"`
+	// UserID and ProjectID for multi-tenant memory context injection.
+	UserID    string `json:"user_id,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
 }
 
 // ResponseFormat controls structured output.
@@ -229,6 +232,8 @@ type RoutingMetrics struct {
 	ToolCount         int     `json:"tool_count"`         // number of tools
 	Score             float64 `json:"score"`              // composite score
 	Complexity        string  `json:"complexity"`         // "simple", "medium", "complex"
+	Confidence        float64 `json:"confidence"`         // [0,1] how confident the classification is
+	Margin            float64 `json:"margin"`             // distance to nearest decision boundary
 }
 
 // ---------------------------------------------------------------------------

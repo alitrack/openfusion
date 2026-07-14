@@ -7,6 +7,14 @@ import (
 	"github.com/lhy/openfusion/internal/types"
 )
 
+// absDiff returns the absolute difference between two float64 values.
+func absDiff(a, b float64) float64 {
+	if a > b {
+		return a - b
+	}
+	return b - a
+}
+
 // ModelRouter selects panel/judge configurations based on request complexity.
 // Uses a 5-dimension heuristic inspired by OpenFang's routing.rs:
 //  1. Token estimate (chars/4)
@@ -88,6 +96,14 @@ func (r *ModelRouter) Score(req *types.ChatRequest) types.RoutingMetrics {
 	// Composite score: weighted sum normalized to [0, 1]
 	metrics.Score = r.computeScore(metrics)
 	metrics.Complexity = r.classifyComplexity(metrics.Score)
+
+	// Confidence & Margin — inspired by SquillaRouter's routing signals.
+	// Confidence: how far the score is from the nearest decision boundary.
+	// Margin: distance to the closest threshold.
+	simpleDist := absDiff(metrics.Score, r.config.SimpleThreshold)
+	complexDist := absDiff(metrics.Score, r.config.ComplexThreshold)
+	metrics.Margin = min(simpleDist, complexDist)
+	metrics.Confidence = 1.0 - min(metrics.Margin*2.0, 1.0)
 
 	return metrics
 }

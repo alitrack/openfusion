@@ -1,0 +1,96 @@
+# OpenFusion Policy & Agent Governance Configuration
+# Version: 1.0
+version: "1.0"
+
+rules:
+  # --- Cost control ---
+  - name: "block-high-cost-for-free-tier"
+    when:
+      conditions:
+        - field: user_tier
+          op: eq
+          value: "free"
+        - field: estimated_cost
+          op: gt
+          value: 0.05
+    then:
+      action: deny
+      message: "Estimated cost exceeds free tier limit"
+
+  - name: "escalate-very-high-cost"
+    when:
+      conditions:
+        - field: estimated_cost
+          op: gt
+          value: 1.00
+    then:
+      action: escalate
+      message: "High-cost request requires manual approval"
+
+  # --- Tool category restrictions ---
+  - name: "block-restricted-tools"
+    when:
+      conditions:
+        - field: tool_category
+          op: in
+          value:
+            - "system_modify"
+            - "admin_action"
+            - "data_delete"
+        - field: user_tier
+          op: neq
+          value: "admin"
+    then:
+      action: deny
+      message: "Restricted tool category requires admin tier"
+
+  - name: "warn-sensitive-tools"
+    when:
+      conditions:
+        - field: tool_category
+          op: in
+          value:
+            - "financial"
+            - "personal_data"
+            - "credentials"
+    then:
+      action: warn
+      message: "Sensitive tool category accessed"
+
+  # --- Model restrictions ---
+  - name: "block-premium-models-free-tier"
+    when:
+      conditions:
+        - field: user_tier
+          op: eq
+          value: "free"
+        - field: model_name
+          op: in
+          value:
+            - "gpt-4o"
+            - "claude-3-opus"
+            - "gemini-2.0-pro"
+    then:
+      action: deny
+      message: "Premium models not available on free tier"
+
+  - name: "log-all-pro-usage"
+    when:
+      conditions:
+        - field: user_tier
+          op: eq
+          value: "pro"
+    then:
+      action: log
+      message: "Pro tier request logged"
+
+  # --- Cost warnings ---
+  - name: "warn-moderate-cost"
+    when:
+      conditions:
+        - field: estimated_cost
+          op: gte
+          value: 0.10
+    then:
+      action: warn
+      message: "Request cost exceeds $0.10"

@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/lhy/openfusion/internal/logger"
 	"github.com/lhy/openfusion/internal/logging"
+	"github.com/lhy/openfusion/internal/policy"
 	"github.com/lhy/openfusion/internal/ratelimit"
 	"github.com/lhy/openfusion/internal/types"
 )
@@ -58,6 +60,7 @@ type Server struct {
 	rateLimiter *ratelimit.Limiter
 	log         *logger.Logger
 	hook        *logging.Hook
+	policyEng   *policy.PolicyEngine
 }
 
 // NewServer creates a new API server.
@@ -72,6 +75,11 @@ func NewServer(engine FusionEngine, authToken, addr string, rl *ratelimit.Limite
 	}
 	s.registerRoutes()
 	return s
+}
+
+// SetPolicyEngine configures the governance policy engine.
+func (s *Server) SetPolicyEngine(pe *policy.PolicyEngine) {
+	s.policyEng = pe
 }
 
 // Handler returns the HTTP handler (for use with net/http).
@@ -355,12 +363,40 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// --- POLICY: Evaluate governance rules before fusion dispatch ---
+	presetName := strings.TrimPrefix(model, "openfusion/")
+	if s.policyEng != nil && s.policyEng.RuleCount() > 0 {
+		evalCtx := &policy.PolicyEvalContext{
+			UserTier:     req.UserID,  // use userID as tier for now (extensible)
+			ModelName:    presetName,
+			RequestModel: model,
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		result, err := s.policyEng.Evaluate(ctx, evalCtx, &req)
+		if err != nil {
+			s.log.Warn("policy evaluation error", "error", err.Error())
+		} else if result != nil {
+			if !result.Allowed {
+				s.log.Warn("policy denied request", "model", model, "denials", fmt.Sprintf("%d", len(result.Denials)))
+				writeJSON(w, http.StatusForbidden, map[string]any{
+					"error":   "policy denied",
+					"denials": result.Denials,
+				})
+				return
+			}
+			if len(result.Warnings) > 0 {
+				s.log.Warn("policy warnings for request", "model", model, "count", fmt.Sprintf("%d", len(result.Warnings)))
+			}
+		}
+	}
+
 	// Auto-route via skill matching when model is auto
 	if model == "auto" || model == "openfusion/auto" {
 		resp, err := s.engine.ExecuteAuto(&req)
 		if err != nil {
-		s.log.Warn("auto-route failed", "error", err.Error())
-		writeError(w, http.StatusInternalServerError, "auto-route failed")
+			s.log.Warn("auto-route failed", "error", err.Error())
+			writeError(w, http.StatusInternalServerError, "auto-route failed")
 			return
 		}
 		writeJSON(w, http.StatusOK, resp)
@@ -532,4 +568,3 @@ func writeStrings(b *strings.Builder, items []string) {
 		b.WriteString(s)
 	}
 }
-

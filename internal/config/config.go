@@ -52,10 +52,10 @@ type ServerConfig struct {
 
 // ProviderDef defines a single provider endpoint.
 type ProviderDef struct {
-	BaseURL     string            `yaml:"base_url"`
-	APIKey      string            `yaml:"api_key"`
-	Plugin      string            `yaml:"plugin,omitempty"`
-	HealthCheck *HealthCheckDef   `yaml:"health_check,omitempty"`
+	BaseURL     string          `yaml:"base_url"`
+	APIKey      string          `yaml:"api_key"`
+	Plugin      string          `yaml:"plugin,omitempty"`
+	HealthCheck *HealthCheckDef `yaml:"health_check,omitempty"`
 }
 
 // HealthCheckDef defines health check parameters for a provider.
@@ -69,16 +69,24 @@ type HealthCheckDef struct {
 
 // PresetConfig holds preset directory and inline items.
 type PresetConfig struct {
-	Dir   string                     `yaml:"dir"`
+	Dir   string                      `yaml:"dir"`
 	Items map[string]types.InlinePreset `yaml:"items,omitempty"`
 }
 
 // FusionConfig holds fusion engine tuning parameters.
 type FusionConfig struct {
-	DefaultTimeout       int                 `yaml:"default_timeout"`
-	MaxConcurrent        int                 `yaml:"max_concurrent"`
-	PanelTimeoutPerModel int                 `yaml:"panel_timeout_per_model"`
-	Router               types.RouterConfig  `yaml:"router"`
+	DefaultTimeout       int                `yaml:"default_timeout"`
+	MaxConcurrent        int                `yaml:"max_concurrent"`
+	PanelTimeoutPerModel int                `yaml:"panel_timeout_per_model"`
+	Router               types.RouterConfig `yaml:"router"`
+	Guardrails           GuardrailsConfig   `yaml:"guardrails"`
+}
+
+// GuardrailsConfig holds content safety guardrail settings.
+type GuardrailsConfig struct {
+	Enabled    bool     `yaml:"enabled"`
+	Guards     []string `yaml:"guards"`      // "pii", "injection", "toxicity"
+	BlockOnWarn bool    `yaml:"block_on_warn"` // if true, also block on warn actions
 }
 
 // RateLimitConfig holds rate limiting configuration.
@@ -104,6 +112,12 @@ type LoggingConfig struct {
 	Hook logging.HookConfig `yaml:"hook"`
 }
 
+// AuditConfig holds audit trail settings.
+type AuditConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	OutputDir string `yaml:"output_dir"`
+}
+
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() *Config {
 	return &Config{
@@ -120,6 +134,10 @@ func DefaultConfig() *Config {
 			MaxConcurrent:        8,
 			PanelTimeoutPerModel: 60,
 			Router:               DefaultRouterConfig(),
+			Guardrails: GuardrailsConfig{
+				Enabled: false,
+				Guards:  []string{},
+			},
 		},
 		RateLimit: RateLimitConfig{
 			Enabled: false,

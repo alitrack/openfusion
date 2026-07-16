@@ -10,10 +10,14 @@ import (
 	"time"
 
 	"github.com/lhy/openfusion/internal/api"
+	"github.com/lhy/openfusion/internal/audit"
 	"github.com/lhy/openfusion/internal/cache"
 	"github.com/lhy/openfusion/internal/codex"
 	"github.com/lhy/openfusion/internal/config"
+	"github.com/lhy/openfusion/internal/guard"
+	"github.com/lhy/openfusion/internal/guard/builtin"
 	"github.com/lhy/openfusion/internal/judge"
+	"github.com/lhy/openfusion/internal/memory"
 	"github.com/lhy/openfusion/internal/metrics"
 	"github.com/lhy/openfusion/internal/panel"
 	"github.com/lhy/openfusion/internal/preset"
@@ -41,6 +45,13 @@ type Engine struct {
 	configPath     string
 	router         *ModelRouter
 	dagPlanner     DAGPlannerConfig
+	memoryStore    *memory.Store // multi-tenant structured memory
+
+	// Guardrails pipeline
+	guardPipeline *guard.GuardPipeline
+
+	// Audit event logger
+	auditLogger *audit.EventLogger
 }
 
 // DAGPlannerConfig holds DAG planner settings.
@@ -79,6 +90,43 @@ func NewEngine(
 	e.skillExecutor.Store(se)
 	e.providerMgr.Store(pm)
 	return e
+}
+
+// SetGuardPipeline configures the guardrail middleware pipeline.
+func (e *Engine) SetGuardPipeline(pipeline *guard.GuardPipeline) {
+	e.guardPipeline = pipeline
+}
+
+// SetAuditLogger configures the audit event logger.
+func (e *Engine) SetAuditLogger(logger *audit.EventLogger) {
+	e.auditLogger = logger
+}
+
+// ConfigureGuardrails builds and sets the guard pipeline from config.
+func (e *Engine) ConfigureGuardrails(cfg config.GuardrailsConfig) {
+	if !cfg.Enabled || len(cfg.Guards) == 0 {
+		return
+	}
+
+	pipeline := guard.NewPipeline()
+	for _, g := range cfg.Guards {
+		switch g {
+		case "pii":
+			pipeline.Add(builtin.NewPIIGuard())
+		case "injection":
+			pipeline.Add(builtin.NewInjectionGuard())
+		case "toxicity":
+			pipeline.Add(builtin.NewToxicityGuard())
+		}
+	}
+	e.guardPipeline = pipeline
+}
+
+// SetMemoryStore configures the multi-tenant memory backend.
+// When set, the engine injects relevant memories into requests and
+// extracts new memories from responses asynchronously.
+func (e *Engine) SetMemoryStore(ms *memory.Store) {
+	e.memoryStore = ms
 }
 
 // Reload re-reads the config file and hot-swaps engine internals.
@@ -214,7 +262,7 @@ func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error
 	return resp, nil
 }
 
-// Execute runs the full fusion pipeline: panel → judge → response.
+// Execute runs the full fusion pipeline: guard → panel → judge → guard → response.
 func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.ChatResponse, error) {
 	p, ok := e.presetRegistry.Load().Get(presetName)
 	if !ok {
@@ -240,6 +288,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	}
 
 	ctx := context.Background()
+	fusionID := fmt.Sprintf("ofusion_%d", time.Now().UnixNano())
 
 	// Start root tracing span
 	var rootSpan tracing.Span
@@ -269,6 +318,32 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		return nil, fmt.Errorf("no user message found in request")
 	}
 
+	// --- GUARD: Input check before panel dispatch ---
+	if e.guardPipeline != nil && e.guardPipeline.Len() > 0 {
+		pipelineResult, err := e.guardPipeline.CheckInput(ctx, req)
+		if err != nil {
+			// Audit: guard block
+			if e.auditLogger != nil {
+				e.auditLogger.Log(audit.EventGuardBlock, map[string]interface{}{
+					"reason": err.Error(),
+					"stage":  "input",
+				}, presetName, fusionID, req.UserID, req.ProjectID)
+			}
+			return nil, fmt.Errorf("guard: input blocked: %w", err)
+		}
+		if pipelineResult != nil && pipelineResult.HasAction(guard.ActionWarn) {
+			if e.auditLogger != nil {
+				for _, r := range pipelineResult.Warns() {
+					e.auditLogger.Log(audit.EventGuardWarn, map[string]interface{}{
+						"reason":    r.Reason,
+						"guard":     r.GuardName,
+						"stage":     "input",
+					}, presetName, fusionID, req.UserID, req.ProjectID)
+				}
+			}
+		}
+	}
+
 	// Step 0: Cache check before any API calls
 	cacheKey := cache.Key(presetName, cache.CacheParams{
 		Preset:      presetName,
@@ -287,6 +362,10 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 			return cached, nil
 		}
 	}
+
+	// Step 0.4: Memory context injection (after cache, before search)
+	// Only when memoryStore is configured and user/project info is present.
+	req = e.injectMemoryContext(req)
 
 	// Step 0.5: Web search context injection
 	searchMessages := search.AddSearchContext(req.Messages, p.WebSearch)
@@ -317,7 +396,9 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 
 	// Step 1a: If judge=false, return panel responses directly
 	if req.NoJudge != nil && *req.NoJudge {
-		return buildPanelOnlyResponse(presetName, panelResponses), nil
+		resp := buildPanelOnlyResponse(presetName, panelResponses)
+		resp.ID = fusionID
+		return resp, nil
 	}
 
 	// Step 2: Judge synthesis
@@ -357,7 +438,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 
 	// Step 3: Format as OpenAI-compatible response
 	resp := &types.ChatResponse{
-		ID:      fmt.Sprintf("ofusion_%d", time.Now().UnixNano()),
+		ID:      fusionID,
 		Object:  "chat.completion",
 		Model:   presetName,
 		Choices: []types.Choice{
@@ -374,12 +455,81 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		resp.Codex = cx
 	}
 
+	// --- GUARD: Output check before returning response ---
+	if e.guardPipeline != nil && e.guardPipeline.Len() > 0 {
+		pipelineResult, err := e.guardPipeline.CheckOutput(ctx, resp)
+		if err != nil {
+			// Audit: guard block on output
+			if e.auditLogger != nil {
+				e.auditLogger.Log(audit.EventGuardBlock, map[string]interface{}{
+					"reason": err.Error(),
+					"stage":  "output",
+				}, presetName, fusionID, req.UserID, req.ProjectID)
+			}
+			return nil, fmt.Errorf("guard: output blocked: %w", err)
+		}
+		if pipelineResult != nil && pipelineResult.HasAction(guard.ActionWarn) {
+			if e.auditLogger != nil {
+				for _, r := range pipelineResult.Warns() {
+					e.auditLogger.Log(audit.EventGuardWarn, map[string]interface{}{
+						"reason": r.Reason,
+						"guard":  r.GuardName,
+						"stage":  "output",
+					}, presetName, fusionID, req.UserID, req.ProjectID)
+				}
+			}
+		}
+	}
+
+	// --- AUDIT: Log fusion response ---
+	if e.auditLogger != nil {
+		e.auditLogger.Log(audit.EventFusionResponse, map[string]interface{}{
+			"prompt_tokens":     resp.Usage.PromptTokens,
+			"completion_tokens": resp.Usage.CompletionTokens,
+			"total_tokens":      resp.Usage.TotalTokens,
+			"cost_usd":          resp.Usage.CostUSD,
+			"latency_ms":        time.Since(start).Milliseconds(),
+		}, presetName, fusionID, req.UserID, req.ProjectID)
+
+		// Log cost update as separate event
+		e.auditLogger.Log(audit.EventCostUpdate, map[string]interface{}{
+			"cost_usd": resp.Usage.CostUSD,
+		}, presetName, fusionID, req.UserID, req.ProjectID)
+	}
+
 	// Step 3b: Cache the result
 	if e.cache != nil && e.cache.Enabled() {
 		e.cache.Set(cacheKey, resp)
 	}
 
 	return resp, nil
+}
+
+// injectMemoryContext prepends relevant memories as a system-level context
+// injection. Only active when memoryStore is configured and the request
+// carries user_id/project_id metadata.
+func (e *Engine) injectMemoryContext(req *types.ChatRequest) *types.ChatRequest {
+	if e.memoryStore == nil || (req.UserID == "" && req.ProjectID == "") {
+		return req
+	}
+
+	summary := e.memoryStore.ContextSummary(req.UserID, req.ProjectID, 5)
+	if summary == "" {
+		return req
+	}
+
+	// Inject as a prefix to the first user message (avoids modifying system prompt)
+	msg := req.Messages
+	if len(msg) > 0 {
+		for i := len(msg) - 1; i >= 0; i-- {
+			if msg[i].Role == "user" {
+				msg[i].Content = summary + "\n---\n" + fmt.Sprint(msg[i].Content)
+				break
+			}
+		}
+	}
+
+	return req
 }
 
 // buildPanelOnlyResponse constructs a response without judge synthesis.
@@ -438,8 +588,6 @@ func buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) 
 }
 
 // applyPresetOverrides applies request-level panel/judge overrides to a preset.
-// Returns a new copy when overrides are present; returns the original pointer
-// when both are nil (zero allocation for common case).
 func applyPresetOverrides(p *types.Preset, panelOverride []types.PanelMember, judgeOverride *types.JudgeConfig) *types.Preset {
 	if panelOverride == nil && judgeOverride == nil {
 		return p

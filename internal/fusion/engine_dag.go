@@ -47,10 +47,17 @@ func (e *Engine) ExecuteDAG(req *types.ChatRequest) (*types.ChatResponse, error)
 			return "", fmt.Errorf("dag planner provider '%s': %w", plannerProvider, err)
 		}
 
+		// Inject memory context for planner if available.
+		plannerSystem := system
+		if e.memoryStore != nil && req.UserID != "" && req.ProjectID != "" {
+			if s := e.memoryStore.ContextSummary(req.UserID, req.ProjectID, 5); s != "" {
+				plannerSystem = s + "\n" + system
+			}
+		}
 		plannerReq := &types.ChatRequest{
 			Model: plannerModel,
 			Messages: []types.ChatMessage{
-				{Role: "system", Content: system},
+				{Role: "system", Content: plannerSystem},
 				{Role: "user", Content: user},
 			},
 			MaxTokens: maxTokens,

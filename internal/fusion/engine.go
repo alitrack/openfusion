@@ -45,6 +45,7 @@ type Engine struct {
 	configPath     string
 	router         *ModelRouter
 	dagPlanner     DAGPlannerConfig
+	preComp        *PreCompressor
 	memoryStore    *memory.Store // multi-tenant structured memory
 
 	// Guardrails pipeline
@@ -396,7 +397,7 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 
 	// Step 1a: If judge=false, return panel responses directly
 	if req.NoJudge != nil && *req.NoJudge {
-		resp := buildPanelOnlyResponse(presetName, panelResponses)
+		resp := e.buildPanelOnlyResponse(presetName, panelResponses)
 		resp.ID = fusionID
 		return resp, nil
 	}
@@ -533,7 +534,7 @@ func (e *Engine) injectMemoryContext(req *types.ChatRequest) *types.ChatRequest 
 }
 
 // buildPanelOnlyResponse constructs a response without judge synthesis.
-func buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) *types.ChatResponse {
+func (e *Engine) buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) *types.ChatResponse {
 	var b strings.Builder
 	summaries := make([]types.PanelResponseSummary, 0, len(responses))
 	totalUsage := types.Usage{}
@@ -568,7 +569,11 @@ func buildPanelOnlyResponse(presetName string, responses []types.PanelResponse) 
 			b.WriteString(pr.Error)
 			b.WriteString("]\n")
 		} else {
-			b.WriteString(pr.Content)
+			content := pr.Content
+			if e.preComp != nil {
+				content = e.preComp.Compress(content)
+			}
+			b.WriteString(content)
 		}
 		b.WriteString("\n\n")
 

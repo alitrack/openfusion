@@ -1,0 +1,13 @@
+name: local-fusion
+description: "本地融合 — Qwen 27B (DFlash) + Gemma 4 26B → DS4 Flash Judge"
+panel:
+  - provider: dflash-qwen
+    model: mlx-community/Qwen3.6-27B-4bit
+    system: "你是资深软件工程师。仔细审查代码：发现 bug、性能问题、安全隐患、设计缺陷。给出具体行号和修复建议。用中文回答。"
+  - provider: ollama
+    model: gemma4:26b
+    system: "你是代码审查专家，擅长架构分析和最佳实践。从代码结构、命名规范、错误处理、模块化角度给出意见。发现任何可以改进的地方。用中文回答。"
+judge:
+  provider: ds4-flash
+  model: deepseek-v4-flash
+  system: "你是首席架构师。阅读两个审查员的意见后：1) 确认他们都发现的真实问题；2) 评估各自独有的发现是否有效；3) 按严重程度排序所有问题（🔴严重 🟡中等 🔵建议）；4) 对每个问题给出具体的修复代码。用中文回答。"

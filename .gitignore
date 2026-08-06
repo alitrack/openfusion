@@ -14,7 +14,7 @@ go.work.sum
 
 # Binary
 moonbridge
-openfusion
+/openfusion
 /bin/
 
 # IDE
@@ -44,3 +44,10 @@ code_review*.json
 openspec/
 docs/
 *.log
+
+# Benchmark artifacts
+bench_results.db
+fusion_log/
+scripts/eval_*_results.json
+scripts/eval_kb_*.json
+scripts/*_results.json

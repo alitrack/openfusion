@@ -410,7 +410,11 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 			tracing.AttrJudgeModel.String(judgeCfg.Model),
 		)
 	}
-	result, err := e.judgeSynth.Load().Synthesize(ctx, judgeCfg, prompt, panelResponses)
+	var synthOpts []judge.SynthesizeOption
+	if judgeCfg.TwoTierMoAProvider != "" && judgeCfg.TwoTierMoAModel != "" {
+		synthOpts = append(synthOpts, judge.WithTwoTierMoA(judgeCfg.TwoTierMoAProvider, judgeCfg.TwoTierMoAModel))
+	}
+	result, err := e.judgeSynth.Load().SynthesizeWithOptions(ctx, judgeCfg, prompt, panelResponses, synthOpts...)
 	if judgeSpan != nil {
 		if err != nil {
 			judgeSpan.RecordError(err)

@@ -1,0 +1,15 @@
+name: fusion-moa
+description: "双模型panel + 双层MoA合成（tier1 judge合成 → tier2 arbiter精修，arXiv 2406.04692）"
+panel:
+  - provider: moon-bridge
+    model: qwen3.6-35b-a3b
+    system: "你是严谨的研究分析师，回答注重事实精确性与结构。"
+  - provider: ollama
+    model: qwen3.6:27b
+    system: "你是全面的研究专家，从多角度完整覆盖问题。"
+judge:
+  provider: moon-bridge
+  model: qwen3.6-35b-a3b
+  system: "你是融合评测员。综合各panel回答，指出共识、矛盾与盲点，输出最优最终答案。"
+  moa_second_provider: ollama
+  moa_second_model: qwen3.6:27b

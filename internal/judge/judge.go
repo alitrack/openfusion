@@ -22,10 +22,13 @@ type Synthesizer struct {
 type SynthesizeOption func(*synthesizeOptions)
 
 type synthesizeOptions struct {
-	systemPrompt      string
-	webSearchContext  string
+	systemPrompt       string
+	webSearchContext   string
 	skillPromptContext string
-	analysisDepth     AnalysisDepth
+	analysisDepth      AnalysisDepth
+	twoTierMoA         bool
+	secondPassProvider string
+	secondPassModel    string
 }
 
 // WithSystemPrompt sets a custom system prompt for the judge.
@@ -53,6 +56,17 @@ func WithSkillPromptContext(ctx string) SynthesizeOption {
 func WithAnalysisDepth(depth AnalysisDepth) SynthesizeOption {
 	return func(o *synthesizeOptions) {
 		o.analysisDepth = depth
+	}
+}
+
+// WithTwoTierMoA enables two-tier Mixture-of-Agents synthesis (MoA paper, arXiv 2406.04692):
+// tier-1 judge synthesizes from panel responses, then a second judge pass references
+// both the tier-1 synthesis and the raw panel outputs to produce the final answer.
+func WithTwoTierMoA(secondPassProvider, secondPassModel string) SynthesizeOption {
+	return func(o *synthesizeOptions) {
+		o.twoTierMoA = true
+		o.secondPassProvider = secondPassProvider
+		o.secondPassModel = secondPassModel
 	}
 }
 
@@ -132,6 +146,18 @@ func (s *Synthesizer) SynthesizeWithOptions(ctx context.Context, judgeCfg types.
 		answer = resp.Choices[0].Message.Content
 	}
 
+	// Two-tier MoA: tier-1 synthesis is done; now run a second judge pass that
+	// references the tier-1 synthesis plus raw panel outputs (MoA layering).
+	if o.twoTierMoA && answer != "" && o.secondPassProvider != "" && o.secondPassModel != "" {
+		secondPass, err := s.runSecondPass(ctx, o, prompt, panelResponses, labels, answer)
+		if err != nil {
+			// Second pass is best-effort; keep tier-1 answer on failure.
+			_ = err
+		} else if secondPass != "" {
+			answer = secondPass
+		}
+	}
+
 	result := &types.FusionResult{
 		Prompt: prompt,
 		Panel:  panelResponses,
@@ -159,6 +185,61 @@ func (s *Synthesizer) SynthesizeWithOptions(ctx context.Context, judgeCfg types.
 // PromptBuilder returns the internal prompt builder for external use.
 func (s *Synthesizer) PromptBuilder() *JudgePromptBuilder {
 	return s.promptBuilder
+}
+
+// runSecondPass executes the tier-2 MoA judge call. It builds a prompt that
+// contains the original question, the tier-1 synthesis, and the raw panel
+// responses, then asks the second-pass model to produce the final answer.
+func (s *Synthesizer) runSecondPass(ctx context.Context, o *synthesizeOptions, prompt string,
+	panelResponses []types.PanelResponse, labels []string, tier1Answer string) (string, error) {
+
+	var sb strings.Builder
+	sb.WriteString("You are the final arbiter in a two-tier model ensemble.\n\n")
+	sb.WriteString("=== ORIGINAL QUESTION ===\n")
+	sb.WriteString(prompt)
+	sb.WriteString("\n\n=== TIER-1 SYNTHESIS (initial judge output) ===\n")
+	sb.WriteString(tier1Answer)
+	sb.WriteString("\n\n=== RAW MODEL RESPONSES ===\n")
+	for i, pr := range panelResponses {
+		if pr.Error != "" {
+			continue
+		}
+		label := fmt.Sprintf("Model %d", i+1)
+		if i < len(labels) && labels[i] != "" {
+			label = labels[i]
+		}
+		sb.WriteString("--- " + label + " ---\n")
+		sb.WriteString(pr.Content)
+		sb.WriteString("\n\n")
+	}
+	sb.WriteString("Produce the FINAL answer. Improve on the tier-1 synthesis by resolving ")
+	sb.WriteString("remaining contradictions, filling gaps only where the raw responses support it, ")
+	sb.WriteString("and tightening the overall quality. Output only the final answer.\n")
+
+	p, err := s.providerManager.Get(o.secondPassProvider)
+	if err != nil {
+		return "", fmt.Errorf("second-pass judge provider: %w", err)
+	}
+
+	judgeReq := &types.ChatRequest{
+		Model: o.secondPassModel,
+		Messages: []types.ChatMessage{
+			{Role: "user", Content: sb.String()},
+		},
+	}
+
+	judgeCtx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+
+	resp, err := p.ChatCompletion(judgeCtx, judgeReq)
+	if err != nil {
+		return "", fmt.Errorf("second-pass judge call: %w", err)
+	}
+
+	if len(resp.Choices) > 0 {
+		return resp.Choices[0].Message.Content, nil
+	}
+	return "", nil
 }
 
 // extractAnalysis does simple keyword-based extraction for structured analysis.

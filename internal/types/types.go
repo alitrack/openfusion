@@ -138,6 +138,11 @@ type JudgeConfig struct {
 	Provider     string `yaml:"provider" json:"provider"`
 	Model        string `yaml:"model" json:"model"`
 	SystemPrompt string `yaml:"system,omitempty" json:"system,omitempty"`
+	// TwoTierMoA enables the two-tier Mixture-of-Agents synthesis (arXiv 2406.04692):
+	// after the tier-1 judge pass, a second-pass model references the tier-1 synthesis
+	// plus raw panel outputs to produce the final answer. Empty values disable it.
+	TwoTierMoAProvider string `yaml:"moa_second_provider,omitempty" json:"moa_second_provider,omitempty"`
+	TwoTierMoAModel    string `yaml:"moa_second_model,omitempty" json:"moa_second_model,omitempty"`
 }
 
 // WebSearchConfig defines web search behavior for a skill/preset.

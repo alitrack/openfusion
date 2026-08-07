@@ -1,0 +1,18 @@
+name: fusion-hetero
+description: "异构三模型 panel + 双层MoA合成 — 本地qwen3.6(严谨) + Modelscope 397B(深度) + 122B(广度) → 397B judge"
+panel:
+  - provider: moon-bridge
+    model: qwen3.6-35b-a3b
+    system: "你是严谨的研究分析师，回答注重事实精确性与逻辑推理，逐步推导，给出结构化分析。"
+  - provider: modelscope
+    model: Qwen/Qwen3.5-397B-A17B
+    system: "你是深度知识专家，拥有广泛的世界知识。对事实性问题给出准确细节，标注不确定之处。"
+  - provider: modelscope
+    model: Qwen/Qwen3.5-122B-A10B
+    system: "你是多学科视角专家，覆盖不同角度，给出结构清晰、兼顾广度与可操作性的回答。"
+judge:
+  provider: modelscope
+  model: MiniMax/MiniMax-M1-80k
+  system: "你是融合评测员。综合各panel回答，指出共识、矛盾与盲点，整合出超越任何单个回答的最优最终答案。注意：不要引用非权威来源；不要把不同信用评级的债券等同对待；不要声称80TTB豁免适用于NCD利息；用结构化格式呈现财务指标。"
+  moa_second_provider: modelscope
+  moa_second_model: Qwen/Qwen3.5-122B-A10B

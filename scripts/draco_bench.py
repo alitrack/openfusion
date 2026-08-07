@@ -18,6 +18,10 @@ MOON = "http://127.0.0.1:38440/v1/chat/completions"
 OLLAMA = "http://10.10.10.122:11434/v1/chat/completions"
 GEMINI_BASE = "https://gemini.pdfcpu.com/v1beta"
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# 评分器选择: 默认强制本地 qwen (同judge保证 solo/fusion 相对可比).
+# Gemini 免费配额已耗尽且评分漂移大, 不用于正式跑.
+FORCE_QWEN_JUDGE = os.environ.get("FORCE_QWEN_JUDGE", "1") == "1"
 GEMINI_MODEL = "gemini-2.5-flash"
 DRACO_FILE = "/tmp/draco_test.jsonl"
 OUT_DIR = "/tmp/draco_run"
@@ -46,10 +50,8 @@ def call_chat(url, model, prompt, max_tokens=MAX_TOKENS, timeout=TIMEOUT, extra=
         return f"EXCEPTION: {r.stdout[:200] if r.stdout else r.stderr[:200]}", {}
 
 def call_gemini(system, user, retries=3):
-    """rubric 评分 (默认 qwen3.6-35b via moon-bridge; 失败回退 Gemini pdfcpu 代理)
-    说明: DRACO 官方用 gemini-3-pro; 本项目本地评分与生成同源, 但 solo/fusion 用
-    同一 judge, 相对对比有效. GEMINI_API_KEY 可用时仍优先 Gemini."""
-    if not GEMINI_KEY:
+    """rubric 评分 (默认强制 qwen3.6-35b via moon-bridge; FORCE_QWEN_JUDGE=0 时走 Gemini)"""
+    if FORCE_QWEN_JUDGE or not GEMINI_KEY:
         return call_chat(MOON, "qwen3.6-35b-a3b", user, max_tokens=4000,
                          extra={"system": system})[0]
     url = f"{GEMINI_BASE}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_KEY}"
@@ -126,15 +128,18 @@ RUBRIC_PROMPT = """你是严格的基准评测员。根据给定的评估标准(
 def score_answer(problem, answer, rubric):
     prompt = RUBRIC_PROMPT.format(criteria=rubric[:6000], answer=answer[:10000])
     sys_msg = "你是 DRACO 基准的专家评分员。只输出 JSON。"
-    raw = call_gemini(sys_msg, prompt)
-    # 提取 JSON
-    m = re.search(r'\[.*\]', raw, re.S)
-    if not m:
-        return None, raw
-    try:
-        return json.loads(m.group(0)), raw
-    except Exception:
-        return None, raw
+    raw = ""
+    for attempt in range(2):
+        raw = call_gemini(sys_msg, prompt)
+        m = re.search(r'\[.*\]', raw, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0)), raw
+            except Exception:
+                pass
+        if attempt == 0:
+            print(f"      评分输出异常, 重试... ({raw[:80]})", flush=True)
+    return None, raw
 
 def pct_weighted(sc):
     """按 DRACO 官方口径：每条 criterion 的 weight 加权计算百分比"""
@@ -144,7 +149,10 @@ def pct_weighted(sc):
     total_w = 0.0
     earned = 0.0
     for x in sc:
-        w = x.get("weight", 1)
+        if not isinstance(x, dict):
+            continue
+        # 兼容两种评分输出格式: 长键 {weight, verdict} / 短键 {w, v}
+        w = x.get("weight", x.get("w", 1))
         if isinstance(w, str):
             m = re.search(r"weight\s*(\d+)", w)
             w = float(m.group(1)) if m else 1.0
@@ -153,7 +161,7 @@ def pct_weighted(sc):
                 w = float(w) if w else 1.0
             except (TypeError, ValueError):
                 w = 1.0
-        v = pts.get(x.get("verdict", "FAIL"), 0.0)
+        v = pts.get(x.get("verdict", x.get("v", "FAIL")), 0.0)
         total_w += w
         earned += w * v
     return round(100 * earned / total_w, 1) if total_w else None
@@ -186,13 +194,27 @@ def main():
     print(f"DRACO 数据集: {len(tasks)} 题, 本次跑 {N_TASKS} 题", flush=True)
     tasks = tasks[:N_TASKS]
 
+    # 断点续跑: 跳过已完成的 id (results.jsonl 追加模式); 分数为 None 的行重跑
+    done_ids = set()
+    if os.path.exists(f"{OUT_DIR}/results.jsonl"):
+        for l in open(f"{OUT_DIR}/results.jsonl"):
+            try:
+                d = json.loads(l)
+                if d.get("solo_score") is not None and d.get("fusion_score") is not None:
+                    done_ids.add(d["id"])
+            except Exception:
+                pass
+    pending = [t for t in tasks if t["id"] not in done_ids]
+    if done_ids:
+        print(f"  已跳过 {len(tasks)-len(pending)} 题 (断点续跑)", flush=True)
+
     results = []
     t_start = time.time()
-    for i, task in enumerate(tasks):
+    for i, task in enumerate(pending):
         qid = task["id"][:8]
         problem = task["problem"]
         rubric = parse_rubric(task)
-        print(f"\n[{i+1}/{len(tasks)}] {qid}: {problem[:80]}...", flush=True)
+        print(f"\n[{i+1}/{len(pending)}] {qid}: {problem[:80]}...", flush=True)
 
         # A) Solo
         t0 = time.time()
@@ -221,16 +243,25 @@ def main():
         results.append(row)
         print(f"  → solo {row['solo_score']}% vs fusion {row['fusion_score']}%", flush=True)
 
-        # 中途保存
-        with open(f"{OUT_DIR}/results.jsonl", "w") as f:
-            for r in results:
-                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        # 中途保存 (追加模式, 断点续跑安全)
+        with open(f"{OUT_DIR}/results.jsonl", "a") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    # 汇总
+    # 汇总 (读全部行, 含历史断点数据; 按 id 去重保留最新)
+    all_rows = []
+    if os.path.exists(f"{OUT_DIR}/results.jsonl"):
+        seen = {}
+        for l in open(f"{OUT_DIR}/results.jsonl"):
+            try:
+                d = json.loads(l)
+                seen[d["id"]] = d
+            except Exception:
+                pass
+        all_rows = list(seen.values())
     print("\n" + "="*70)
     print(f"{'ID':<10} {'Solo%':>7} {'Fusion%':>8} {'Δ':>6}  {'solo_s':>7} {'fusion_s':>9}")
     wins = 0; ties = 0; losses = 0; deltas = []
-    for r in results:
+    for r in all_rows:
         a, b = r["solo_score"], r["fusion_score"]
         if a is None or b is None:
             print(f"{r['id'][:8]:<10}  ERR")

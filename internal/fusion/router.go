@@ -174,10 +174,47 @@ func (r *ModelRouter) selectByComplexity(complexity string) (panel []types.Panel
 	return panel, judge
 }
 
+// SelectPresetByTopic chooses panel and judge based on topic classification.
+// topic: "open" | "fact" | "simple" | "medium"(回退)
+// If the requested topic tier is not configured, falls back to the complexity tiers.
+func (r *ModelRouter) SelectPresetByTopic(topic string) (panel []types.PanelMember, judge types.JudgeConfig) {
+	switch topic {
+	case "open":
+		panel = r.config.OpenPanel
+		judge = r.config.OpenJudge
+		if len(panel) == 0 || judge.Model == "" {
+			return r.selectByComplexity("complex")
+		}
+	case "fact":
+		panel = r.config.FactPanel
+		judge = r.config.FactJudge
+		if len(panel) == 0 || judge.Model == "" {
+			return r.selectByComplexity("medium")
+		}
+	case "simple":
+		// 简单题: 直接用一个快速模型, 不做融合 (panel=1, judge=自身)
+		panel = r.config.SimplePanel
+		judge = r.config.SimpleJudge
+		if len(panel) == 0 || judge.Model == "" {
+			return r.selectByComplexity("simple")
+		}
+	default: // "medium" / 未知 → 保守回退同构fusion
+		panel = r.config.FactPanel
+		judge = r.config.FactJudge
+		if len(panel) == 0 || judge.Model == "" {
+			return r.selectByComplexity("medium")
+		}
+	}
+	return panel, judge
+}
+
 // DefaultRouterConfig returns a sensible default RouterConfig.
 func DefaultRouterConfig() types.RouterConfig {
 	return types.RouterConfig{
 		SimpleThreshold:  0.3,
 		ComplexThreshold: 0.7,
+		// Topic routing defaults: enabled, 置信度<0.7 回退
+		TopicClassifierEnabled:     true,
+		TopicConfidenceThreshold:   0.7,
 	}
 }

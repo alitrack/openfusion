@@ -80,6 +80,11 @@ type FusionConfig struct {
 	PanelTimeoutPerModel int                `yaml:"panel_timeout_per_model"`
 	Router               types.RouterConfig `yaml:"router"`
 	Guardrails           GuardrailsConfig   `yaml:"guardrails"`
+
+	// Topic classifier (Gemma4 fast model on 115:8012 /v1/completions)
+	ClassifierURL      string `yaml:"classifier_url"`
+	ClassifierModel    string `yaml:"classifier_model"`
+	ClassifierTimeout  int    `yaml:"classifier_timeout"`
 }
 
 // GuardrailsConfig holds content safety guardrail settings.
@@ -138,6 +143,9 @@ func DefaultConfig() *Config {
 				Enabled: false,
 				Guards:  []string{},
 			},
+			ClassifierURL:     "http://10.10.10.115:8012/v1/completions",
+			ClassifierModel:   "gemma-4-26B-A4B-it",
+			ClassifierTimeout: 12,
 		},
 		RateLimit: RateLimitConfig{
 			Enabled: false,

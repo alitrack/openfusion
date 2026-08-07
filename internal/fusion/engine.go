@@ -44,6 +44,7 @@ type Engine struct {
 	tracer         *tracing.Tracer
 	configPath     string
 	router         *ModelRouter
+	classifier     *TopicClassifier
 	dagPlanner     DAGPlannerConfig
 	preComp        *PreCompressor
 	memoryStore    *memory.Store // multi-tenant structured memory
@@ -265,6 +266,7 @@ func (e *Engine) ExecuteAuto(req *types.ChatRequest) (*types.ChatResponse, error
 
 // Execute runs the full fusion pipeline: guard → panel → judge → guard → response.
 func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.ChatResponse, error) {
+	ctx := context.Background()
 	p, ok := e.presetRegistry.Load().Get(presetName)
 	if !ok {
 		return nil, fmt.Errorf("unknown model: %s", presetName)
@@ -273,11 +275,39 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 	// Apply request-level overrides (panel/judge) before execution
 	p = applyPresetOverrides(p, req.PanelOverride, req.JudgeOverride)
 
+	// Topic-aware routing: classify by topic type (Gemma4 fast classifier),
+	// then select the matching panel/judge. Falls back to complexity routing.
+	if e.classifier != nil && e.router != nil && e.router.config.TopicClassifierEnabled {
+		prompt := types.ExtractLastUserMessage(req.Messages)
+		if prompt != "" {
+			tc, _ := e.classifier.Classify(ctx, prompt)
+			// Log the routing decision for auditability
+			e.logRoutingDecision(presetName, tc)
+			if !tc.Fallback && (tc.Topic == "open" || tc.Topic == "fact" || tc.Topic == "simple") {
+				routedPanel, routedJudge := e.router.SelectPresetByTopic(tc.Topic)
+				if len(routedPanel) > 0 && routedJudge.Model != "" {
+					p = &types.Preset{
+						Name:        p.Name,
+						Description: p.Description,
+						Panel:       routedPanel,
+						Judge:       routedJudge,
+						WebSearch:   p.WebSearch,
+					}
+				}
+			} else {
+				// Low confidence or classifier failure → fall back to complexity routing
+				e.logRoutingDecision(presetName, TopicClassification{
+					Topic: "medium", Confidence: 0, Reason: "fallback to complexity routing: " + tc.Reason, Classifier: "complexity", Fallback: true,
+				})
+			}
+		}
+	}
+
 	// Use ModelRouter to select panel/judge based on request complexity
-	// if the router is configured and has tiered panels
+	// if the router is configured and has tiered panels (and topic routing didn't already replace it)
 	if e.router != nil && len(e.router.config.MediumPanel) > 0 {
 		routedPanel, routedJudge := e.router.SelectPreset(req)
-		if len(routedPanel) > 0 {
+		if len(routedPanel) > 0 && p.Judge.Model == "" {
 			p = &types.Preset{
 				Name:        p.Name,
 				Description: p.Description,
@@ -288,7 +318,6 @@ func (e *Engine) Execute(presetName string, req *types.ChatRequest) (*types.Chat
 		}
 	}
 
-	ctx := context.Background()
 	fusionID := fmt.Sprintf("ofusion_%d", time.Now().UnixNano())
 
 	// Start root tracing span
@@ -596,6 +625,19 @@ func (e *Engine) buildPanelOnlyResponse(presetName string, responses []types.Pan
 	}
 }
 
+// logRoutingDecision records the topic-routing decision to the audit log.
+func (e *Engine) logRoutingDecision(presetName string, tc TopicClassification) {
+	if e.auditLogger != nil {
+		e.auditLogger.Log(audit.EventRouting, map[string]interface{}{
+			"topic":      tc.Topic,
+			"confidence": tc.Confidence,
+			"reason":     tc.Reason,
+			"classifier": tc.Classifier,
+			"fallback":   tc.Fallback,
+		}, presetName, "", "", "")
+	}
+}
+
 // applyPresetOverrides applies request-level panel/judge overrides to a preset.
 func applyPresetOverrides(p *types.Preset, panelOverride []types.PanelMember, judgeOverride *types.JudgeConfig) *types.Preset {
 	if panelOverride == nil && judgeOverride == nil {
@@ -633,4 +675,9 @@ func deepCopyPreset(p *types.Preset) *types.Preset {
 // SetModelRouter configures the ModelRouter for budget-adaptive fusion.
 func (e *Engine) SetModelRouter(r *ModelRouter) {
 	e.router = r
+}
+
+// SetClassifier configures the topic classifier for 题型路由.
+func (e *Engine) SetClassifier(c *TopicClassifier) {
+	e.classifier = c
 }

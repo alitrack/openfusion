@@ -226,6 +226,19 @@ type RouterConfig struct {
 	ComplexJudge     JudgeConfig   `yaml:"complex_judge" json:"complex_judge"`
 	SimpleThreshold  float64       `yaml:"simple_threshold" json:"simple_threshold"`
 	ComplexThreshold float64       `yaml:"complex_threshold" json:"complex_threshold"`
+
+	// Topic-aware routing tiers (题型路由):
+	//   open  = 开放/综述/方法论 → 异构fusion (多模型panel, 知识广度)
+	//   fact  = 强事实/安全约束 → 同构fusion (qwen×2, 敢给具体事实)
+	// SimplePanel 复用为 "简单题直答" (Gemma4快答)
+	OpenPanel  []PanelMember `yaml:"open_panel" json:"open_panel"`
+	OpenJudge  JudgeConfig   `yaml:"open_judge" json:"open_judge"`
+	FactPanel  []PanelMember `yaml:"fact_panel" json:"fact_panel"`
+	FactJudge  JudgeConfig   `yaml:"fact_judge" json:"fact_judge"`
+	// TopicClassifierEnabled enables Gemma4-based topic classification.
+	TopicClassifierEnabled bool `yaml:"topic_classifier_enabled" json:"topic_classifier_enabled"`
+	// TopicConfidenceThreshold: below this, fall back to medium tier (保守).
+	TopicConfidenceThreshold float64 `yaml:"topic_confidence_threshold" json:"topic_confidence_threshold"`
 }
 
 // RoutingMetrics holds the 5-dimension heuristic scores for model routing.

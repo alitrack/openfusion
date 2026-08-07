@@ -21,6 +21,7 @@ const (
 	EventPolicyWarn     EventType = "policy.warn"
 	EventPolicyEscalate EventType = "policy.escalate"
 	EventCostUpdate     EventType = "cost.update"
+	EventRouting        EventType = "fusion.routing"
 	EventSystemError    EventType = "system.error"
 )
 

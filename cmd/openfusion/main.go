@@ -174,7 +174,28 @@ func main() {
 		judge.NewSynthesizer(pm, judgeTimeout),
 		defaultTimeout)
 
-	engine := fusion.NewEngine(pr, pm, panelTimeout, judgeTimeout, defaultTimeout, mc, fusionCache, healthChecker, tracer, sm, se, fusion.NewModelRouter(fusion.DefaultRouterConfig()))
+	// Build ModelRouter from config (falls back to defaults)
+	routerCfg := cfg.Fusion.Router
+	if routerCfg.SimpleThreshold == 0 && routerCfg.ComplexThreshold == 0 {
+		routerCfg = config.DefaultRouterConfig()
+	}
+	modelRouter := fusion.NewModelRouter(routerCfg)
+
+	// Topic classifier (Gemma4 fast classifier on 115:8012 /v1/completions)
+	// Used for 题型路由: open/fact/simple. Falls back gracefully when unreachable.
+	var classifier *fusion.TopicClassifier
+	if routerCfg.TopicClassifierEnabled {
+		classifier = fusion.NewTopicClassifier(
+			cfg.Fusion.ClassifierURL,
+			cfg.Fusion.ClassifierModel,
+			time.Duration(cfg.Fusion.ClassifierTimeout)*time.Second,
+			routerCfg.TopicConfidenceThreshold,
+		)
+		log.Info("topic classifier enabled", "url", cfg.Fusion.ClassifierURL, "model", cfg.Fusion.ClassifierModel)
+	}
+
+	engine := fusion.NewEngine(pr, pm, panelTimeout, judgeTimeout, defaultTimeout, mc, fusionCache, healthChecker, tracer, sm, se, modelRouter)
+	engine.SetClassifier(classifier)
 
 	// DAG planner is configured via config.yaml dag.planner
 	// and read internally by ExecuteDAG (no separate setter needed)

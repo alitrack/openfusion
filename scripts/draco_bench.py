@@ -45,8 +45,13 @@ def call_chat(url, model, prompt, max_tokens=MAX_TOKENS, timeout=TIMEOUT, extra=
     except Exception:
         return f"EXCEPTION: {r.stdout[:200] if r.stdout else r.stderr[:200]}", {}
 
-def call_gemini(system, user, retries=4):
-    """Gemini (pdfcpu proxy) — 用于 rubric 评分, 带退避重试"""
+def call_gemini(system, user, retries=3):
+    """rubric 评分 (默认 qwen3.6-35b via moon-bridge; 失败回退 Gemini pdfcpu 代理)
+    说明: DRACO 官方用 gemini-3-pro; 本项目本地评分与生成同源, 但 solo/fusion 用
+    同一 judge, 相对对比有效. GEMINI_API_KEY 可用时仍优先 Gemini."""
+    if not GEMINI_KEY:
+        return call_chat(MOON, "qwen3.6-35b-a3b", user, max_tokens=4000,
+                         extra={"system": system})[0]
     url = f"{GEMINI_BASE}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_KEY}"
     payload = {"contents": [{"parts": [{"text": f"{system}\n\nUSER:\n{user}"}]}],
                "generationConfig": {"maxOutputTokens": 4000, "temperature": 0.2}}
@@ -59,17 +64,17 @@ def call_gemini(system, user, retries=4):
             d = json.loads(r.stdout)
             if d.get("error"):
                 code = d["error"].get("code", 0)
-                if code in (429, 500, 503) and attempt < retries - 1:
-                    wait = 15 * (attempt + 1)
-                    print(f"      gemini {code} 限流, {wait}s 后重试...", flush=True)
-                    time.sleep(wait)
-                    continue
+                # 429 quota 耗尽: 直接回退本地 qwen, 不浪费重试
+                if code in (429, 500, 503):
+                    print(f"      gemini {code}, 回退 qwen 评分...", flush=True)
+                    return call_chat(MOON, "qwen3.6-35b-a3b", user, max_tokens=4000,
+                                     extra={"system": system})[0]
                 return f"ERR: {json.dumps(d)[:200]}"
             parts = d.get("candidates", [{}])[0].get("content", {}).get("parts", [])
             return parts[0].get("text", "") if parts else f"ERR: {json.dumps(d)[:200]}"
         except Exception as e:
             if attempt < retries - 1:
-                time.sleep(10 * (attempt + 1))
+                time.sleep(5 * (attempt + 1))
                 continue
             return f"EXCEPTION: {e}"
     return "ERR: max retries"
@@ -139,13 +144,15 @@ def pct_weighted(sc):
     total_w = 0.0
     earned = 0.0
     for x in sc:
-        # weight 从 requirement 行里的 (weight N) 或 criterion 对象取
         w = x.get("weight", 1)
         if isinstance(w, str):
             m = re.search(r"weight\s*(\d+)", w)
             w = float(m.group(1)) if m else 1.0
         else:
-            w = float(w or 1)
+            try:
+                w = float(w) if w else 1.0
+            except (TypeError, ValueError):
+                w = 1.0
         v = pts.get(x.get("verdict", "FAIL"), 0.0)
         total_w += w
         earned += w * v
@@ -208,7 +215,8 @@ def main():
             "solo_score": pct_weighted(sc_solo), "fusion_score": pct_weighted(sc_fusion),
             "solo_chars": len(solo), "fusion_chars": len(fusion),
             "solo_s": round(t_solo,1), "fusion_s": round(t_fusion,1),
-            "solo_judge_raw": raw1[:500], "fusion_judge_raw": raw2[:500],
+            "solo_verdicts": [{"r": x.get("requirement","")[:80], "w": x.get("weight",1), "v": x.get("verdict","")} for x in sc_solo] if sc_solo else None,
+            "fusion_verdicts": [{"r": x.get("requirement","")[:80], "w": x.get("weight",1), "v": x.get("verdict","")} for x in sc_fusion] if sc_fusion else None,
         }
         results.append(row)
         print(f"  → solo {row['solo_score']}% vs fusion {row['fusion_score']}%", flush=True)
